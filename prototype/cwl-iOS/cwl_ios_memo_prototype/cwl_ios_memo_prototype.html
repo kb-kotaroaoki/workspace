@@ -1,24 +1,22 @@
 <!DOCTYPE html>
 <!--
   ============================================================
-  ChatworkLive iOS プロトタイプ（AI メモ／スタンプ機能版）
+  ChatworkLive iOS プロトタイプ（AI メモ版）
   ------------------------------------------------------------
   ファイル：cwl_ios_memo_prototype.html
 
   含まれる機能:
-    - スタンプ機能 (アクションシートの「スタンプ表示」トグル)
-    - スタンプバー (Toolbar 上、よく使う 6 個 + もっと)
-    - スタンプ BottomSheet (全 50 個グリッド)
-    - スタンプ送信時のリアクションアニメーション
+    - Mic / Video / Share / End のツールバー操作
     - メンバー選択時のフルスクリーン映像表示 ⇄ ピンク背景
-    - スタンプ表示メニュー項目に専用アイコン (stampIcon.svg) — iOS 26 のみ
+    - アクションシート（NavBar その他から開くメニュー）
+    - iOS 18 / iOS 26 のモード切替、Light / Dark テーマ切替
   ============================================================
 -->
 <html lang="ja">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ChatworkLive Prototype — v2 (snapshot)</title>
+<title>ChatworkLive Prototype</title>
 <style>
   /* ========== Reset & Base ========== */
   *, *::before, *::after { box-sizing: border-box; }
@@ -598,178 +596,6 @@
   .device-screen[data-selected-user] .self-avatar { display: none; }
   .device-screen[data-selected-user] .video-full { display: block; }
 
-  /* ========== Stamp Bar (Toolbar の上、ON 時のみ表示) ========== */
-  .stamp-bar {
-    position: absolute;
-    left: 16px;
-    right: 16px;
-    bottom: 228px;                  /* Toolbar bottom 152 + Toolbar height 56 + gap 20 */
-    height: 48px;
-    display: none;                   /* 既定非表示。data-stamps="show" で表示 */
-    align-items: center;
-    padding: 0 8px;
-    gap: 4px;
-    background: rgba(0, 0, 0, 0.85);
-    -webkit-backdrop-filter: blur(20px) saturate(180%);
-    backdrop-filter: blur(20px) saturate(180%);
-    border-radius: 24px;
-    overflow-x: auto;
-    overflow-y: hidden;
-    -webkit-overflow-scrolling: touch;
-    scrollbar-width: none;
-    z-index: 3;
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
-  }
-  .stamp-bar::-webkit-scrollbar { display: none; }
-  .device-screen[data-stamps="show"] .stamp-bar { display: flex; }
-
-  .stamp-bar-item {
-    width: 40px;
-    height: 40px;
-    flex-shrink: 0;
-    border: none;
-    background: transparent;
-    padding: 0;
-    border-radius: 20px;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.05s ease;
-  }
-  .stamp-bar-item:active { transform: scale(0.88); }
-  .stamp-bar-item img {
-    display: block;
-    width: 32px;
-    height: 32px;
-    object-fit: contain;
-    pointer-events: none;
-  }
-
-  .stamp-more-btn {
-    width: 36px;
-    height: 36px;
-    flex-shrink: 0;
-    border: none;
-    background: rgba(255, 255, 255, 0.18);
-    color: #FFFFFF;
-    padding: 0;
-    border-radius: 50%;
-    cursor: pointer;
-    display: inline-flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 22px;
-    font-weight: 300;
-    line-height: 1;
-    transition: transform 0.05s ease, background 0.15s ease;
-  }
-  .stamp-more-btn:active { transform: scale(0.88); background: rgba(255, 255, 255, 0.28); }
-
-  /* ========== Stamp Sheet (BottomSheet 全 50 個) ========== */
-  .stamp-sheet-backdrop {
-    position: absolute;
-    inset: 0;
-    background: rgba(0, 0, 0, 0);
-    pointer-events: none;
-    transition: background 0.3s ease;
-    z-index: 20;
-  }
-  .stamp-sheet-backdrop.is-open {
-    background: rgba(0, 0, 0, 0.5);
-    pointer-events: auto;
-  }
-  .stamp-sheet {
-    position: absolute;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    height: 65%;
-    background: #1C1C1E;
-    color: #F2F2F7;
-    border-radius: 16px 16px 0 0;
-    display: flex;
-    flex-direction: column;
-    transform: translateY(100%);
-    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
-    z-index: 21;
-    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.3);
-  }
-  .stamp-sheet.is-open { transform: translateY(0); }
-  .stamp-sheet-handle {
-    width: 36px;
-    height: 5px;
-    background: rgba(255, 255, 255, 0.25);
-    border-radius: 3px;
-    margin: 8px auto 0;
-    flex-shrink: 0;
-  }
-  .stamp-sheet-header {
-    padding: 12px 16px 8px;
-    font-family: "Hiragino Sans", -apple-system, sans-serif;
-    font-size: 17px;
-    font-weight: 600;
-    color: #FFFFFF;
-    text-align: center;
-    flex-shrink: 0;
-    letter-spacing: -0.43px;
-  }
-  .stamp-grid {
-    flex: 1;
-    overflow-y: auto;
-    padding: 8px 16px 32px;
-    display: grid;
-    grid-template-columns: repeat(6, 1fr);
-    gap: 6px;
-    align-content: start;
-  }
-  .stamp-grid-item {
-    aspect-ratio: 1;
-    border: none;
-    background: transparent;
-    padding: 9px;
-    cursor: pointer;
-    border-radius: 10px;
-    transition: background 0.1s ease, transform 0.05s ease;
-  }
-  .stamp-grid-item:active { background: rgba(255, 255, 255, 0.12); transform: scale(0.94); }
-  .stamp-grid-item img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-    pointer-events: none;
-  }
-
-  /* ========== Stamp Reaction (シュッと出て、スーっと加速しながら上に消える) ========== */
-  .stamp-reaction {
-    position: absolute;
-    bottom: 252px;                  /* スタンプバー上部付近から発生 */
-    left: calc(50% - 32px);          /* 64/2 = 32 で水平中央に置く（transform を使わない方式） */
-    width: 64px;
-    height: 64px;
-    pointer-events: none;
-    z-index: 5;
-    animation: stamp-float 1500ms forwards;
-    will-change: transform, opacity;
-  }
-  .stamp-reaction img {
-    display: block;
-    width: 100%;
-    height: 100%;
-    object-fit: contain;
-  }
-  @keyframes stamp-float {
-    /* シュッ — ポップイン (0〜15%) easeOutCubic で素早く立ち上がる */
-    0%   { transform: translate(0, 0)     scale(0.5); opacity: 0;
-           animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1); }
-    15%  { transform: translate(0, -10px) scale(1.0); opacity: 1;
-           animation-timing-function: cubic-bezier(0.55, 0, 0.95, 0.45); }
-    /* スーっと — 単一の ease-in 曲線で 15〜100% を一気に駆け上がる
-       slow start → 加速、scale と opacity も同じカーブで自然にフェード */
-    100% { transform: translate(0, -440px) scale(0.85); opacity: 0; }
-  }
-
   /* ========== Action Sheet: トグル項目 ========== */
   /* iOS 18 で row-reverse されているのを上書きし、label 左寄せに */
   .device-screen .as-item.as-toggle {
@@ -909,15 +735,6 @@
           </span>
           <span class="as-label">リンクをコピー</span>
         </button>
-        <button class="as-item as-toggle" type="button" role="menuitemcheckbox" aria-checked="false" data-state="off" data-action="stamp-toggle">
-          <span class="as-icon" aria-hidden="true">
-            <!-- stampIcon.svg (笑顔の丸い顔) -->
-            <svg viewBox="0 0 24 25" fill="none" xmlns="http://www.w3.org/2000/svg">
-              <path d="M12 20.9336C10.8324 20.9336 9.73665 20.7122 8.71289 20.2695C7.68913 19.8324 6.78988 19.2264 6.01514 18.4517C5.2404 17.6769 4.63167 16.7777 4.18896 15.7539C3.75179 14.7301 3.5332 13.6344 3.5332 12.4668C3.5332 11.2992 3.75179 10.2035 4.18896 9.17969C4.63167 8.15592 5.2404 7.25667 6.01514 6.48193C6.78988 5.70166 7.68913 5.09294 8.71289 4.65576C9.73665 4.21859 10.8324 4 12 4C13.1676 4 14.2633 4.21859 15.2871 4.65576C16.3109 5.09294 17.2101 5.70166 17.9849 6.48193C18.7596 7.25667 19.3656 8.15592 19.8027 9.17969C20.2454 10.2035 20.4668 11.2992 20.4668 12.4668C20.4668 13.6344 20.2454 14.7301 19.8027 15.7539C19.3656 16.7777 18.7596 17.6769 17.9849 18.4517C17.2101 19.2264 16.3109 19.8324 15.2871 20.2695C14.2633 20.7122 13.1676 20.9336 12 20.9336ZM12 19.5225C12.974 19.5225 13.887 19.3398 14.7393 18.9746C15.5915 18.6094 16.3413 18.103 16.9888 17.4556C17.6362 16.8081 18.1426 16.0583 18.5078 15.2061C18.873 14.3538 19.0557 13.4408 19.0557 12.4668C19.0557 11.4928 18.873 10.5798 18.5078 9.72754C18.1426 8.86979 17.6362 8.11995 16.9888 7.47803C16.3413 6.83057 15.5915 6.32422 14.7393 5.95898C13.887 5.59375 12.974 5.41113 12 5.41113C11.026 5.41113 10.113 5.59375 9.26074 5.95898C8.40853 6.32422 7.65869 6.83057 7.01123 7.47803C6.36377 8.11995 5.85742 8.86979 5.49219 9.72754C5.12695 10.5798 4.94434 11.4928 4.94434 12.4668C4.94434 13.4408 5.12695 14.3538 5.49219 15.2061C5.85742 16.0583 6.36377 16.8081 7.01123 17.4556C7.65869 18.103 8.40853 18.6094 9.26074 18.9746C10.113 19.3398 11.026 19.5225 12 19.5225ZM11.9917 16.6255C11.4162 16.6255 10.9098 16.5231 10.4727 16.3184C10.0355 16.1081 9.69515 15.8701 9.45166 15.6045C9.2137 15.3333 9.09473 15.1064 9.09473 14.9238C9.09473 14.8242 9.13346 14.755 9.21094 14.7163C9.28841 14.6776 9.37142 14.6776 9.45996 14.7163C9.76432 14.8823 10.1102 15.0428 10.4976 15.1978C10.8905 15.3472 11.3885 15.4219 11.9917 15.4219C12.5949 15.4219 13.0902 15.3472 13.4775 15.1978C13.8704 15.0428 14.2163 14.8823 14.5151 14.7163C14.6037 14.6776 14.6867 14.6776 14.7642 14.7163C14.8472 14.755 14.8887 14.8242 14.8887 14.9238C14.8887 15.1064 14.7669 15.3333 14.5234 15.6045C14.2855 15.8701 13.9479 16.1081 13.5107 16.3184C13.0736 16.5231 12.5672 16.6255 11.9917 16.6255ZM9.52637 11.728C9.26628 11.728 9.03939 11.6229 8.8457 11.4126C8.65202 11.1968 8.55518 10.9229 8.55518 10.5908C8.55518 10.2588 8.65202 9.98486 8.8457 9.76904C9.03939 9.55322 9.26628 9.44531 9.52637 9.44531C9.79199 9.44531 10.0244 9.55322 10.2236 9.76904C10.4229 9.98486 10.5225 10.2588 10.5225 10.5908C10.5225 10.9229 10.4229 11.1968 10.2236 11.4126C10.0244 11.6229 9.79199 11.728 9.52637 11.728ZM14.4487 11.728C14.1886 11.728 13.9618 11.6229 13.7681 11.4126C13.5744 11.1968 13.4775 10.9229 13.4775 10.5908C13.4775 10.2588 13.5744 9.98486 13.7681 9.76904C13.9618 9.55322 14.1886 9.44531 14.4487 9.44531C14.7144 9.44531 14.9468 9.55322 15.146 9.76904C15.3452 9.98486 15.4448 10.2588 15.4448 10.5908C15.4448 10.9229 15.3452 11.1968 15.146 11.4126C14.9468 11.6229 14.7144 11.728 14.4487 11.728Z" fill="currentColor"/>
-            </svg>
-          </span>
-          <span class="as-label">スタンプ表示</span>
-        </button>
         <button class="as-item" type="button" role="menuitem" data-action="bg-setting">
           <span class="as-icon" aria-hidden="true">
             <!-- BackgroundIcon.svg -->
@@ -986,26 +803,6 @@
             <path d="M28 23.5298C28.998 23.5298 30.0068 23.5819 31.0264 23.687C32.0513 23.7922 33.0437 23.967 34.0039 24.2104C34.9641 24.4484 35.8466 24.7638 36.6504 25.1567C37.4539 25.5495 38.1281 26.0336 38.6729 26.6089C39.0882 27.046 39.4116 27.5364 39.6436 28.0786C39.8809 28.6208 39.9999 29.2266 40 29.896C40 30.1947 39.968 30.5105 39.9033 30.8423C39.844 31.1743 39.7355 31.4741 39.5791 31.7397C39.4281 31.9996 39.2227 32.1825 38.9639 32.2876C38.7915 32.409 38.5948 32.4701 38.374 32.4702C38.1582 32.4702 37.9012 32.4448 37.6045 32.395L34.6514 31.8804C34.1444 31.7974 33.7478 31.64 33.4619 31.4077C33.1814 31.1753 32.9737 30.8013 32.8389 30.2866L32.3535 28.4351C32.305 28.2582 32.2425 28.1251 32.167 28.0366C32.0914 27.9427 31.9566 27.8627 31.7627 27.7964C31.3419 27.647 30.8157 27.533 30.1846 27.4556C29.5535 27.3726 28.8252 27.3338 28 27.3394C27.18 27.3449 26.4544 27.3869 25.8232 27.4644C25.1921 27.5363 24.6634 27.647 24.2373 27.7964C24.0488 27.8627 23.914 27.9427 23.833 28.0366C23.7575 28.1251 23.6974 28.2582 23.6543 28.4351L23.1689 30.2866C23.0341 30.8012 22.824 31.1753 22.5381 31.4077C22.2576 31.64 21.8609 31.7974 21.3486 31.8804L18.3955 32.395C18.0988 32.4448 17.8418 32.4702 17.626 32.4702C17.4105 32.4701 17.2164 32.4091 17.0439 32.2876C16.7851 32.1825 16.5797 31.9997 16.4287 31.7397C16.2777 31.4741 16.1668 31.1743 16.0967 30.8423C16.032 30.5105 16 30.1947 16 29.896C16.0001 29.2266 16.1191 28.6208 16.3564 28.0786C16.5938 27.5364 16.9172 27.046 17.3271 26.6089C17.8773 26.0335 18.5548 25.5496 19.3584 25.1567C20.1621 24.7639 21.0414 24.4484 21.9961 24.2104C22.9563 23.967 23.9487 23.7922 24.9736 23.687C26.004 23.5819 27.0128 23.5298 28 23.5298Z" fill="currentColor"/>
           </svg>
         </button>
-      </div>
-
-      <!-- Stamp Bar: アクションシートの「スタンプ表示」ON で出るリアクションバー
-           よく使う 6 個 + もっと（+）の 7 アイテム構成 -->
-      <div class="stamp-bar" id="stampBar" role="toolbar" aria-label="スタンプ">
-        <button class="stamp-bar-item" type="button" data-stamp="emo_clap" aria-label="拍手"><img src="Docment/Asset/stamp/emo_clap@240.gif" alt=""></button>
-        <button class="stamp-bar-item" type="button" data-stamp="emo_smile" aria-label="笑顔"><img src="Docment/Asset/stamp/emo_smile@240.gif" alt=""></button>
-        <button class="stamp-bar-item" type="button" data-stamp="emo_yes" aria-label="はい"><img src="Docment/Asset/stamp/emo_yes@240.gif" alt=""></button>
-        <button class="stamp-bar-item" type="button" data-stamp="emo_heart" aria-label="ハート"><img src="Docment/Asset/stamp/emo_heart@240.gif" alt=""></button>
-        <button class="stamp-bar-item" type="button" data-stamp="emo_cracker" aria-label="お祝い"><img src="Docment/Asset/stamp/emo_cracker@240.gif" alt=""></button>
-        <button class="stamp-bar-item" type="button" data-stamp="emo_nod" aria-label="うなずき"><img src="Docment/Asset/stamp/emo_nod@240.gif" alt=""></button>
-        <button class="stamp-more-btn" type="button" id="stampMoreBtn" aria-label="もっと">+</button>
-      </div>
-
-      <!-- Stamp Sheet: もっと（+）で開く全 50 個の BottomSheet -->
-      <div class="stamp-sheet-backdrop" id="stampSheetBackdrop" aria-hidden="true"></div>
-      <div class="stamp-sheet" id="stampSheet" role="dialog" aria-label="スタンプ一覧" aria-modal="true" aria-hidden="true">
-        <div class="stamp-sheet-handle" aria-hidden="true"></div>
-        <div class="stamp-sheet-header">スタンプ</div>
-        <div class="stamp-grid" id="stampGrid"></div>
       </div>
 
       <!-- Members: 画面下に固定で並ぶユーザーアイコン列 (Figma 1:481 / 18:316) -->
@@ -1104,103 +901,6 @@
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') setMenuOpen(false);
   });
-
-  // ----- Stamp 機能 -----
-  // 全 50 個のスタンプ名（@240.gif を付けて参照）
-  const ALL_STAMPS = [
-    'emo_smile', 'emo_grin', 'emo_more_smile', 'emo_wry smile', 'emo_blush',
-    'emo_wink', 'emo_kiss', 'emo_love', 'emo_heart', 'emo_tongueout',
-    'emo_tears', 'emo_sad', 'emo_anger', 'emo_sweat', 'emo_whew',
-    'emo_surprise', 'emo_wonder', 'emo_think', 'emo_snooze', 'emo_yawn',
-    'emo_mumu', 'emo_puke', 'emo_devil', 'emo_otaku', 'emo_quick',
-    'emo_emo', 'emo_kawabot', 'emo_ceo', 'emo_clap', 'emo_yes',
-    'emo_nod', 'emo_bow', 'emo_handshake', 'emo_please', 'emo_roger',
-    'emo_shake', 'emo_dance', 'emo_komanechi', 'emo_muscle', 'emo_gogo',
-    'emo_lucky', 'emo_star', 'emo_cracker', 'emo_cake', 'emo_flower',
-    'emo_eat', 'emo_coffee', 'emo_beer', 'emo_lightbulb', 'emo_talk'
-  ];
-  const stampPath = (name) => `Docment/Asset/stamp/${encodeURIComponent(name)}@240.gif`;
-
-  // 全 50 個グリッドを動的生成
-  const stampGrid = document.getElementById('stampGrid');
-  ALL_STAMPS.forEach(name => {
-    const btn = document.createElement('button');
-    btn.type = 'button';
-    btn.className = 'stamp-grid-item';
-    btn.dataset.stamp = name;
-    btn.setAttribute('aria-label', name.replace(/^emo_/, ''));
-    const img = document.createElement('img');
-    img.src = stampPath(name);
-    img.alt = '';
-    btn.appendChild(img);
-    stampGrid.appendChild(btn);
-  });
-
-  // スタンプ送信（中央にポップ → 上にフロート → フェードアウト）
-  const sendStamp = (name) => {
-    const reaction = document.createElement('div');
-    reaction.className = 'stamp-reaction';
-    // 連投時に重ならないよう左右に少しランダムオフセット（中央 calc(50% - 32px) に対する加減算）
-    const offset = (Math.random() - 0.5) * 80;
-    reaction.style.left = `calc(50% - 32px + ${offset}px)`;
-    const img = document.createElement('img');
-    img.src = stampPath(name);
-    img.alt = '';
-    reaction.appendChild(img);
-    screen.appendChild(reaction);
-    // アニメ完了後に DOM から削除（CSS の 1500ms に合わせて少し余裕）
-    setTimeout(() => reaction.remove(), 1600);
-  };
-
-  // ピン留めバーのスタンプタップで送信
-  document.querySelectorAll('.stamp-bar-item').forEach(btn => {
-    btn.addEventListener('click', (e) => {
-      e.stopPropagation();
-      sendStamp(btn.dataset.stamp);
-    });
-  });
-
-  // BottomSheet 開閉
-  const stampSheet = document.getElementById('stampSheet');
-  const stampSheetBackdrop = document.getElementById('stampSheetBackdrop');
-  const stampMoreBtn = document.getElementById('stampMoreBtn');
-  const setStampSheetOpen = (open) => {
-    stampSheet.classList.toggle('is-open', open);
-    stampSheetBackdrop.classList.toggle('is-open', open);
-    stampSheet.setAttribute('aria-hidden', open ? 'false' : 'true');
-    stampSheetBackdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
-  };
-  stampMoreBtn.addEventListener('click', (e) => {
-    e.stopPropagation();
-    setStampSheetOpen(true);
-  });
-  stampSheetBackdrop.addEventListener('click', () => setStampSheetOpen(false));
-  // ハンドルをタップ／ドラッグでも閉じる（簡易：タップだけ）
-  stampSheet.querySelector('.stamp-sheet-handle').addEventListener('click', () => setStampSheetOpen(false));
-  // グリッドのスタンプタップで送信し、シートを閉じる
-  stampGrid.addEventListener('click', (e) => {
-    const btn = e.target.closest('.stamp-grid-item');
-    if (!btn) return;
-    sendStamp(btn.dataset.stamp);
-    setStampSheetOpen(false);
-  });
-  // Escape で閉じる
-  document.addEventListener('keydown', (e) => {
-    if (e.key === 'Escape' && stampSheet.classList.contains('is-open')) setStampSheetOpen(false);
-  });
-
-  // アクションシート内「スタンプ表示」のトグル
-  const stampToggle = moreMenu.querySelector('.as-toggle[data-action="stamp-toggle"]');
-  if (stampToggle) {
-    stampToggle.addEventListener('click', (e) => {
-      e.stopPropagation();
-      const next = stampToggle.dataset.state === 'on' ? 'off' : 'on';
-      stampToggle.dataset.state = next;
-      stampToggle.setAttribute('aria-checked', next === 'on' ? 'true' : 'false');
-      screen.dataset.stamps = next === 'on' ? 'show' : 'hide';
-      // 既存のメニューアイテムクリックは menu を閉じるが、トグルは閉じる前に状態を反映済み
-    });
-  }
 
   // ----- Member 選択トグル -----
   // タップで選択、もう一度タップで解除。同時に選択できるのは1人だけ

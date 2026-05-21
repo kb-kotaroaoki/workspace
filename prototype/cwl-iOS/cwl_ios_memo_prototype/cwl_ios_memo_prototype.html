@@ -1,0 +1,1263 @@
+<!DOCTYPE html>
+<!--
+  ============================================================
+  ChatworkLive iOS プロトタイプ（AI メモ／スタンプ機能版）
+  ------------------------------------------------------------
+  ファイル：cwl_ios_memo_prototype.html
+
+  含まれる機能:
+    - スタンプ機能 (アクションシートの「スタンプ表示」トグル)
+    - スタンプバー (Toolbar 上、よく使う 6 個 + もっと)
+    - スタンプ BottomSheet (全 50 個グリッド)
+    - スタンプ送信時のリアクションアニメーション
+    - メンバー選択時のフルスクリーン映像表示 ⇄ ピンク背景
+    - スタンプ表示メニュー項目に専用アイコン (stampIcon.svg) — iOS 26 のみ
+  ============================================================
+-->
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ChatworkLive Prototype — v2 (snapshot)</title>
+<style>
+  /* ========== Reset & Base ========== */
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display",
+                 "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+    background: #F2F2F7;
+    color: #242424;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 24px 16px 64px;
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+  /* Page-level dark mode background (周囲の余白も暗くして雰囲気を合わせる) */
+  body.is-dark {
+    background: #0B0B0F;
+    color: #F2F2F7;
+  }
+
+  /* ========== Top Switchers (Theme + OS) ========== */
+  .switcher-row {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    margin-bottom: 32px;
+    flex-wrap: wrap;
+    justify-content: center;
+  }
+  .switcher {
+    display: inline-flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+  }
+  .switcher-label {
+    font-size: 11px;
+    font-weight: 600;
+    letter-spacing: 0.4px;
+    color: #6B6B6B;
+    text-transform: uppercase;
+  }
+  body.is-dark .switcher-label { color: #949494; }
+
+  .tabs {
+    display: inline-flex;
+    background: #EBEFF4;
+    padding: 4px;
+    border-radius: 12px;
+    gap: 4px;
+    transition: background 0.25s ease;
+  }
+  body.is-dark .tabs { background: #1F2128; }
+
+  .tab {
+    appearance: none;
+    border: none;
+    background: transparent;
+    padding: 10px 22px;
+    border-radius: 8px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    color: #6B6B6B;
+    cursor: pointer;
+    transition: background 0.18s ease, color 0.18s ease, box-shadow 0.18s ease;
+    letter-spacing: -0.2px;
+    min-width: 88px;
+  }
+  .tab:hover { color: #474747; }
+  body.is-dark .tab { color: #949494; }
+  body.is-dark .tab:hover { color: #D2DBE5; }
+
+  .tab.is-active {
+    background: #FFFFFF;
+    color: #1A50B7;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  }
+  body.is-dark .tab.is-active {
+    background: #2C2E36;
+    color: #7FA9FF;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.4);
+  }
+
+  /* ========== iPhone Device Frame ========== */
+  .device-frame {
+    width: 390px;
+    height: 844px;
+    background: #000;
+    border-radius: 56px;
+    padding: 12px;
+    box-shadow:
+      0 0 0 2px #1c1c1e,
+      0 24px 60px rgba(0, 0, 0, 0.25),
+      0 8px 20px rgba(0, 0, 0, 0.12);
+    position: relative;
+    transition: box-shadow 0.25s ease;
+  }
+  body.is-dark .device-frame {
+    box-shadow:
+      0 0 0 2px #2c2c2e,
+      0 24px 60px rgba(0, 0, 0, 0.6),
+      0 8px 20px rgba(0, 0, 0, 0.4);
+  }
+
+  .device-screen {
+    width: 100%;
+    height: 100%;
+    border-radius: 44px;
+    overflow: hidden;
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    /* 本来はビデオ映像。一旦 Figma 同様のピンク (BarbiePink #C42760) で塗る */
+    background: #C42760;
+    color: #FFFFFF;
+    transition: background 0.25s ease, color 0.25s ease;
+  }
+  .device-screen.mode-dark {
+    /* Mode 切替の影響を受けないように同色を維持 */
+    background: #C42760;
+    color: #FFFFFF;
+  }
+  /* Camera Off: 背景を Figma の surface/base/default に切替 */
+  .device-screen[data-camera="off"],
+  .device-screen.mode-dark[data-camera="off"] {
+    background: #13202F;
+  }
+
+  /* 自分のアバター（カメラオフ時に画面中央に表示） Figma 16:261 */
+  .self-avatar {
+    width: 144px;                  /* Figma: size-144 */
+    height: 144px;
+    border-radius: 50%;             /* 正円 */
+    overflow: hidden;
+    display: none;                  /* 既定（カメラ ON）は非表示 */
+    background: #2C2C2E;            /* 画像読込前のフォールバック */
+    flex-shrink: 0;
+  }
+  .self-avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  .device-screen[data-camera="off"] .self-avatar { display: block; }
+  /* Camera Off (かつユーザー未選択) の際は Content を中央寄せに */
+  /* padding-bottom で Toolbar(56) + 下端からの距離(152) = 208px 分の領域を確保し、
+     見える領域 (NavHeader 下〜Toolbar 上) の中心にアバターを配置する */
+  .device-screen[data-camera="off"]:not([data-selected-user]) .content {
+    align-items: center;
+    justify-content: center;
+    padding: 0 24px 208px 24px;
+  }
+
+  /* Dynamic Island */
+  .dynamic-island {
+    position: absolute;
+    top: 11px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 124px;
+    height: 36px;
+    background: #000;
+    border-radius: 20px;
+    z-index: 5;
+    pointer-events: none;
+  }
+
+  /* ========== NavHeader ラッパー（StatusBar + NavBar を1つの背景でまとめる） ========== */
+  .nav-header {
+    flex-shrink: 0;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    z-index: 3;
+    /* 背景・テキスト色は theme + mode で指定 */
+  }
+
+  /* ========== Status Bar ========== */
+  /* 背景は透過。色は親 (.nav-header) から継承 */
+  .status-bar {
+    height: 54px;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 22px 0 33px;
+    background: transparent;
+    color: inherit;
+    position: relative;
+  }
+  .status-bar .time {
+    font-family: -apple-system, "SF Pro Text", "SF Pro Display", sans-serif;
+    font-size: 17px;
+    font-weight: 590;
+    line-height: 22px;
+    letter-spacing: -0.43px;
+    font-variant-numeric: tabular-nums;
+  }
+  .status-bar .indicators {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+  }
+  .status-bar svg { display: block; }
+  /* WiFi の描画は viewBox 内で下に偏っているため、少し上にオフセットして高さを揃える */
+  .status-bar .icon-wifi { transform: translateY(-1.5px); }
+
+  /* ========== Navigation Bar ========== */
+  .nav-bar {
+    flex-shrink: 0;
+    display: flex;
+    justify-content: space-between;
+    background: transparent;
+    color: inherit;
+    position: relative;
+  }
+  .nav-bar .nav-side {
+    display: flex;
+    align-items: center;
+  }
+
+  /* Pill ラッパー（Classic では透過の単なる入れ物として機能） */
+  .pill {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  /* NavBar 内 IconButton */
+  .icon-btn {
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: transparent;
+    color: inherit;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+  }
+  .icon-btn:active { opacity: 0.55; }
+  .icon-btn svg { display: block; width: 24px; height: 24px; }
+
+  /* ---------- Classic (iOS 18): フラットな1本帯 ---------- */
+  .device-screen.theme-classic .nav-bar {
+    height: 48px;
+    align-items: center;
+    padding: 0 16px 0 8px;            /* Figma: pl-8, pr-16 */
+  }
+  .device-screen.theme-classic .nav-side.right {
+    gap: 16px;                          /* trailing gap-16 */
+  }
+  .device-screen.theme-classic .pill-group {
+    gap: 16px;                          /* group 内も同じ間隔で1列に見せる */
+  }
+
+  /* ---------- Liquid Glass (iOS 26): Pill が浮く ---------- */
+  .device-screen.theme-lg .nav-bar {
+    height: 54px;
+    align-items: flex-start;
+    padding: 0 16px 10px 16px;        /* Figma: px-16 pb-10 */
+  }
+  .device-screen.theme-lg .nav-side.right {
+    gap: 10px;                          /* Pill 間の gap */
+  }
+  /* Pill 共通（LG）：黒背景の上で見えるライト系グラス + blur */
+  .device-screen.theme-lg .pill {
+    height: 44px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.16);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    box-shadow:
+      inset 0 0 0 1px rgba(255, 255, 255, 0.12),
+      0 1px 2px rgba(0, 0, 0, 0.25);
+  }
+  /* 単独アイコン Pill（戻る・AIメモ）：正円 */
+  .device-screen.theme-lg .pill-single {
+    width: 44px;
+    min-width: 44px;
+    padding: 0;
+    justify-content: center;
+  }
+  /* 3アイコンまとめ Pill（スピーカー/カメラ/その他） */
+  .device-screen.theme-lg .pill-group {
+    padding: 0 8px;                     /* Figma: px-4 = 8px 換算 */
+    gap: 12px;                          /* Figma: gap-12 */
+  }
+  /* LG の icon-btn はタップ領域 36×36（中の SVG は 24×24） */
+  .device-screen.theme-lg .icon-btn {
+    width: 36px;
+    height: 36px;
+  }
+
+  /* ========== Content Area (placeholder) ========== */
+  .content {
+    flex: 1;
+    display: flex;
+    align-items: stretch;
+    justify-content: stretch;
+    /* 下 208px は Toolbar(56) + Toolbar bottom(152) のオーバーレイ領域。
+       Grid/Full もこれを除いた領域に収める */
+    padding: 0 0 208px;
+    box-sizing: border-box;
+    font-size: 13px;
+    letter-spacing: -0.08px;
+    text-align: center;
+    position: relative;
+  }
+  .content .placeholder {
+    border: 1px dashed currentColor;
+    border-radius: 16px;
+    padding: 32px 24px;
+    width: 100%;
+    max-width: 280px;
+    opacity: 0.55;
+  }
+  .content .placeholder strong {
+    display: block;
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 6px;
+    opacity: 0.95;
+  }
+
+  /* ========== ChatworkLive 会議中画面 ========== */
+  /* Classic / LG とも NavHeader は黒固定。LG は上に Pill を浮かせて Liquid Glass 風に見せる */
+  .device-screen .nav-header {
+    background: #000000;
+    color: #FFFFFF;
+  }
+
+  /* ========== Action Sheet (NavBar その他から開くメニュー) Figma 20:783 / 20:793 ========== */
+  .action-sheet {
+    position: absolute;
+    right: 8px;
+    z-index: 10;
+    display: none;
+    flex-direction: column;
+    overflow: hidden;
+  }
+  .action-sheet.is-open { display: flex; }
+  .as-item {
+    display: flex;
+    align-items: center;
+    padding: 0;
+    border: none;
+    background: transparent;
+    cursor: pointer;
+    width: 100%;
+    text-align: left;
+    color: inherit;
+    font-family: inherit;
+  }
+  .as-item:active { background: rgba(0, 0, 0, 0.1); }
+  .as-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    color: inherit;
+  }
+  .as-icon svg { display: block; width: 100%; height: 100%; }
+  .as-label { flex: 1; min-width: 0; }
+
+  /* ---------- iOS 18 (Classic) ---------- */
+  .device-screen.theme-classic .action-sheet {
+    width: 250px;
+    top: 110px;                    /* NavHeader 下 + 8 */
+    background: rgba(225, 225, 225, 0.85);
+    -webkit-backdrop-filter: blur(25px) saturate(180%);
+    backdrop-filter: blur(25px) saturate(180%);
+    border-radius: 12px;
+    box-shadow: 0 0 16px rgba(0, 0, 0, 0.2);
+  }
+  .device-screen.theme-classic .as-item {
+    flex-direction: row-reverse;   /* HTML 順 [icon, label] → 表示順 [label, icon] */
+    height: 44px;
+    padding: 0 16px;
+    color: #000000;
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+    font-weight: 300;              /* W3 */
+    font-size: 16px;
+    line-height: 22px;
+    letter-spacing: -0.43px;
+    border-bottom: 0.5px solid rgba(128, 128, 128, 0.55);
+  }
+  .device-screen.theme-classic .as-item:last-child { border-bottom: none; }
+  .device-screen.theme-classic .as-icon { width: 22px; height: 22px; }
+
+  /* ---------- iOS 26 (Liquid Glass) ---------- */
+  .device-screen.theme-lg .action-sheet {
+    width: 228px;
+    top: 60px;                     /* NavBar の Pill 横に重なる位置 */
+    padding: 10px 16px;
+    background: rgba(245, 245, 245, 0.72);
+    -webkit-backdrop-filter: blur(40px) saturate(180%);
+    backdrop-filter: blur(40px) saturate(180%);
+    border-radius: 34px;
+    box-shadow: 0 8px 28px rgba(0, 0, 0, 0.18);
+  }
+  .device-screen.theme-lg .as-item {
+    /* HTML 順そのまま [icon, label] */
+    padding: 10px 8px;
+    gap: 8px;
+    color: #333333;
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Text", sans-serif;
+    font-weight: 400;
+    font-size: 17px;
+    line-height: 20px;
+    letter-spacing: -0.43px;
+    border-radius: 8px;
+  }
+  .device-screen.theme-lg .as-icon { width: 28px; height: 28px; }
+
+  /* ========== Toolbar (Live コントロール群) Figma node 1:480 ========== */
+  .toolbar {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 152px;                 /* = Members の上辺 (10 + 142) */
+    height: 56px;
+    display: flex;
+    align-items: center;
+    justify-content: center;        /* 4 ボタンを画面中央に */
+    gap: 22px;                       /* Figma: gap-22 */
+    z-index: 2;
+  }
+  .toolbar-btn {
+    width: 56px;
+    height: 56px;
+    border-radius: 50%;             /* 56/2 = 28 → 正円 */
+    background: rgba(0, 0, 0, 0.7); /* Figma: feedback/hidden */
+    color: #C9DAF7;                  /* action/tertiary */
+    border: none;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: background 0.15s ease, transform 0.05s ease;
+  }
+  .toolbar-btn:active { background: rgba(0, 0, 0, 0.95); transform: scale(0.96); }
+  .toolbar-btn.danger {
+    background: #D10015;            /* Figma: action/danger */
+    color: #FFFFFF;                  /* on-background */
+  }
+  .toolbar-btn.danger:active { background: #A50011; transform: scale(0.96); }
+  .toolbar-btn svg {
+    display: block;
+    width: 56px;                     /* SVG 内で icon は中央 24×24 に描画されている */
+    height: 56px;
+  }
+
+  /* Mic / Video / Speaker のオン・オフトグル（共通）*/
+  /* SVG 切替: data-state に応じて on / off アイコンを表示 */
+  .toggle-btn .icon-off,
+  .toggle-btn[data-state="off"] .icon-on {
+    display: none;
+  }
+  .toggle-btn[data-state="off"] .icon-off {
+    display: block;
+  }
+  /* Off 状態: Toolbar の Mic/Video のみ背景を半透明ブルー (Figma feedback/selected/default) に */
+  .toolbar-btn.toggle-btn[data-state="off"] {
+    background: rgba(0, 89, 255, 0.25);
+  }
+  .toolbar-btn.toggle-btn[data-state="off"]:active { background: rgba(0, 89, 255, 0.45); transform: scale(0.96); }
+
+  /* ========== Members (画面下のユーザーアイコン列) Figma node 1:481 ========== */
+  .members {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 10px;                  /* Figma: 1:483 space h-10 */
+    height: 142px;                  /* Figma: 1:481 h-142 */
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    justify-content: center;
+    padding: 0 8px;                 /* Figma: px-8 */
+    z-index: 2;
+    pointer-events: none;           /* 内側で個別有効化 */
+  }
+  .member-row {
+    display: flex;
+    align-items: center;
+    gap: 4px;                       /* Figma: 1:482 gap-4 */
+    max-width: 100%;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;          /* Firefox */
+    pointer-events: auto;
+  }
+  .member-row::-webkit-scrollbar { display: none; } /* WebKit */
+  .member-item {
+    width: 80px;                    /* Figma: Member - Live - Item h-80 (square 80) */
+    height: 80px;
+    padding: 8px;                   /* Figma: p-8 */
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: #13202F;            /* Figma: surface/base/default 濃紺の四角フレーム */
+    overflow: hidden;               /* Figma: overflow-clip */
+    position: relative;             /* オーバーレイ・ネームの基準 */
+    cursor: pointer;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .member-avatar {
+    width: 64px;                    /* Figma: Image - User size-64 */
+    height: 64px;
+    border-radius: 50%;
+    overflow: hidden;
+    background: #2C2C2E;            /* 画像読込前のフォールバック */
+  }
+  .member-avatar img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+  }
+  /* 選択時のオーバーレイ（暗いシャドウ） */
+  .member-overlay {
+    position: absolute;
+    inset: 1px;                     /* 1px のボーダーが見えるよう内側に1px寄せる */
+    background: rgba(0, 0, 0, 0.7); /* Figma: feedback/hidden */
+    display: none;
+    pointer-events: none;
+    z-index: 1;
+  }
+  /* 選択時のユーザーネーム（中央表示） */
+  .member-name {
+    position: absolute;
+    inset: 0;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-family: "Hiragino Sans", "Hiragino Kaku Gothic ProN", sans-serif;
+    font-weight: 300;               /* Hiragino W3 = weight 300 */
+    font-size: 15px;                /* Figma: [Ja] Callout */
+    line-height: 21px;
+    letter-spacing: -0.31px;
+    color: #FFFFFF;
+    text-align: center;
+    pointer-events: none;
+    z-index: 2;
+    padding: 0 2px;
+  }
+  /* 選択状態: 1px ボーダー + オーバーレイ + ネーム表示 */
+  .member-item.is-selected {
+    box-shadow: inset 0 0 0 1px #7AA9FF;  /* Figma: ceruleanblue/40 */
+  }
+  .member-item.is-selected .member-overlay { display: block; }
+  .member-item.is-selected .member-name    { display: flex; }
+
+  /* ========== Video Full View (映像エリア) ========== */
+  /* 既定 (Camera On / 未選択) は device-screen のピンクが透けて見える素のまま。
+     Member 選択時はフル表示に切替、再選択で解除して既定（ピンク）に戻る */
+  .video-full {
+    flex: 1;
+    display: none;
+    background: #C42760;            /* 一旦ピンク（後で動画/画像差し替え） */
+    position: relative;
+    align-self: stretch;
+  }
+  .video-full-name {
+    display: none;                   /* 名前ラベルは非表示 */
+  }
+
+  /* 表示切替ロジック: User 選択時は Self を隠して Full を表示 (camera off より優先) */
+  .device-screen[data-selected-user] .self-avatar { display: none; }
+  .device-screen[data-selected-user] .video-full { display: block; }
+
+  /* ========== Stamp Bar (Toolbar の上、ON 時のみ表示) ========== */
+  .stamp-bar {
+    position: absolute;
+    left: 16px;
+    right: 16px;
+    bottom: 228px;                  /* Toolbar bottom 152 + Toolbar height 56 + gap 20 */
+    height: 48px;
+    display: none;                   /* 既定非表示。data-stamps="show" で表示 */
+    align-items: center;
+    padding: 0 8px;
+    gap: 4px;
+    background: rgba(0, 0, 0, 0.85);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    backdrop-filter: blur(20px) saturate(180%);
+    border-radius: 24px;
+    overflow-x: auto;
+    overflow-y: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    z-index: 3;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  }
+  .stamp-bar::-webkit-scrollbar { display: none; }
+  .device-screen[data-stamps="show"] .stamp-bar { display: flex; }
+
+  .stamp-bar-item {
+    width: 40px;
+    height: 40px;
+    flex-shrink: 0;
+    border: none;
+    background: transparent;
+    padding: 0;
+    border-radius: 20px;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.05s ease;
+  }
+  .stamp-bar-item:active { transform: scale(0.88); }
+  .stamp-bar-item img {
+    display: block;
+    width: 32px;
+    height: 32px;
+    object-fit: contain;
+    pointer-events: none;
+  }
+
+  .stamp-more-btn {
+    width: 36px;
+    height: 36px;
+    flex-shrink: 0;
+    border: none;
+    background: rgba(255, 255, 255, 0.18);
+    color: #FFFFFF;
+    padding: 0;
+    border-radius: 50%;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 22px;
+    font-weight: 300;
+    line-height: 1;
+    transition: transform 0.05s ease, background 0.15s ease;
+  }
+  .stamp-more-btn:active { transform: scale(0.88); background: rgba(255, 255, 255, 0.28); }
+
+  /* ========== Stamp Sheet (BottomSheet 全 50 個) ========== */
+  .stamp-sheet-backdrop {
+    position: absolute;
+    inset: 0;
+    background: rgba(0, 0, 0, 0);
+    pointer-events: none;
+    transition: background 0.3s ease;
+    z-index: 20;
+  }
+  .stamp-sheet-backdrop.is-open {
+    background: rgba(0, 0, 0, 0.5);
+    pointer-events: auto;
+  }
+  .stamp-sheet {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: 65%;
+    background: #1C1C1E;
+    color: #F2F2F7;
+    border-radius: 16px 16px 0 0;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(100%);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
+    z-index: 21;
+    box-shadow: 0 -8px 32px rgba(0, 0, 0, 0.3);
+  }
+  .stamp-sheet.is-open { transform: translateY(0); }
+  .stamp-sheet-handle {
+    width: 36px;
+    height: 5px;
+    background: rgba(255, 255, 255, 0.25);
+    border-radius: 3px;
+    margin: 8px auto 0;
+    flex-shrink: 0;
+  }
+  .stamp-sheet-header {
+    padding: 12px 16px 8px;
+    font-family: "Hiragino Sans", -apple-system, sans-serif;
+    font-size: 17px;
+    font-weight: 600;
+    color: #FFFFFF;
+    text-align: center;
+    flex-shrink: 0;
+    letter-spacing: -0.43px;
+  }
+  .stamp-grid {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px 16px 32px;
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 6px;
+    align-content: start;
+  }
+  .stamp-grid-item {
+    aspect-ratio: 1;
+    border: none;
+    background: transparent;
+    padding: 9px;
+    cursor: pointer;
+    border-radius: 10px;
+    transition: background 0.1s ease, transform 0.05s ease;
+  }
+  .stamp-grid-item:active { background: rgba(255, 255, 255, 0.12); transform: scale(0.94); }
+  .stamp-grid-item img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+    pointer-events: none;
+  }
+
+  /* ========== Stamp Reaction (シュッと出て、スーっと加速しながら上に消える) ========== */
+  .stamp-reaction {
+    position: absolute;
+    bottom: 252px;                  /* スタンプバー上部付近から発生 */
+    left: calc(50% - 32px);          /* 64/2 = 32 で水平中央に置く（transform を使わない方式） */
+    width: 64px;
+    height: 64px;
+    pointer-events: none;
+    z-index: 5;
+    animation: stamp-float 1500ms forwards;
+    will-change: transform, opacity;
+  }
+  .stamp-reaction img {
+    display: block;
+    width: 100%;
+    height: 100%;
+    object-fit: contain;
+  }
+  @keyframes stamp-float {
+    /* シュッ — ポップイン (0〜15%) easeOutCubic で素早く立ち上がる */
+    0%   { transform: translate(0, 0)     scale(0.5); opacity: 0;
+           animation-timing-function: cubic-bezier(0.33, 1, 0.68, 1); }
+    15%  { transform: translate(0, -10px) scale(1.0); opacity: 1;
+           animation-timing-function: cubic-bezier(0.55, 0, 0.95, 0.45); }
+    /* スーっと — 単一の ease-in 曲線で 15〜100% を一気に駆け上がる
+       slow start → 加速、scale と opacity も同じカーブで自然にフェード */
+    100% { transform: translate(0, -440px) scale(0.85); opacity: 0; }
+  }
+
+  /* ========== Action Sheet: トグル項目 ========== */
+  /* iOS 18 で row-reverse されているのを上書きし、label 左寄せに */
+  .device-screen .as-item.as-toggle {
+    flex-direction: row;
+    justify-content: flex-start;
+  }
+  .as-toggle .as-label { flex: 1; text-align: left; }
+  /* iOS 18: leading icon を非表示（label のみで他のメニューと統一感を出す） */
+  .device-screen.theme-classic .as-item.as-toggle .as-icon { display: none; }
+  /* iOS 26: leading icon を表示し、他のメニュー項目と同じレイアウト [icon][label] に */
+  .device-screen.theme-lg .as-item.as-toggle .as-icon { display: inline-flex; }
+
+  /* ========== Caption ========== */
+  .frame-caption {
+    margin-top: 16px;
+    color: #6B6B6B;
+    font-size: 12px;
+    letter-spacing: -0.08px;
+  }
+  body.is-dark .frame-caption { color: #949494; }
+</style>
+</head>
+<body>
+
+  <!-- Switchers -->
+  <div class="switcher-row">
+    <div class="switcher">
+      <span class="switcher-label">Mode</span>
+      <div class="tabs" role="tablist" aria-label="Light / Dark 切替">
+        <button class="tab is-active" data-mode="light" role="tab" aria-selected="true">Light</button>
+        <button class="tab" data-mode="dark" role="tab" aria-selected="false">Dark</button>
+      </div>
+    </div>
+
+    <div class="switcher">
+      <span class="switcher-label">OS</span>
+      <div class="tabs" role="tablist" aria-label="iOS バージョン切替">
+        <button class="tab is-active" data-theme="classic" role="tab" aria-selected="true">iOS 18</button>
+        <button class="tab" data-theme="lg" role="tab" aria-selected="false">iOS 26</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- iPhone Device Frame -->
+  <div class="device-frame" aria-label="iPhone 14 (390×844)">
+    <div class="device-screen theme-classic mode-light" id="screen">
+      <div class="dynamic-island" aria-hidden="true"></div>
+
+      <!-- NavHeader: StatusBar + NavBar 共通ラッパー -->
+      <div class="nav-header">
+      <!-- Status Bar -->
+      <div class="status-bar">
+        <span class="time">9:41</span>
+        <span class="indicators" aria-hidden="true">
+          <!-- Cellular (4 ascending bars) -->
+          <svg width="17" height="11" viewBox="0 0 17 11" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0"  y="7" width="3" height="4"  rx="0.6" fill="currentColor"/>
+            <rect x="4.5" y="5" width="3" height="6"  rx="0.6" fill="currentColor"/>
+            <rect x="9"  y="2.5" width="3" height="8.5" rx="0.6" fill="currentColor"/>
+            <rect x="13.5" y="0" width="3" height="11" rx="0.6" fill="currentColor"/>
+          </svg>
+          <!-- Wifi (3 nested arcs) -->
+          <svg class="icon-wifi" width="17" height="12" viewBox="0 0 17 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path d="M8.5 2.4C5.7 2.4 3.1 3.4 1.1 5.1C0.95 5.22 0.95 5.45 1.08 5.58L2.13 6.61C2.25 6.73 2.45 6.74 2.58 6.62C4.18 5.27 6.26 4.46 8.5 4.46C10.74 4.46 12.82 5.27 14.42 6.62C14.55 6.74 14.75 6.73 14.87 6.61L15.92 5.58C16.05 5.45 16.05 5.22 15.9 5.1C13.9 3.4 11.3 2.4 8.5 2.4Z" fill="currentColor"/>
+            <path d="M8.5 6.1C6.83 6.1 5.29 6.7 4.09 7.7C3.96 7.81 3.96 8.01 4.08 8.13L5.08 9.13C5.2 9.25 5.39 9.26 5.52 9.16C6.34 8.49 7.38 8.09 8.5 8.09C9.62 8.09 10.66 8.49 11.48 9.16C11.61 9.26 11.8 9.25 11.92 9.13L12.92 8.13C13.04 8.01 13.04 7.81 12.91 7.7C11.71 6.7 10.17 6.1 8.5 6.1Z" fill="currentColor"/>
+            <path d="M8.5 9.7C7.74 9.7 7.05 9.99 6.54 10.46C6.4 10.59 6.4 10.81 6.53 10.94L8.16 12.57C8.35 12.76 8.65 12.76 8.84 12.57L10.47 10.94C10.6 10.81 10.6 10.59 10.46 10.46C9.95 9.99 9.26 9.7 8.5 9.7Z" fill="currentColor"/>
+          </svg>
+          <!-- Battery (rectangle + cap, ~85% fill) -->
+          <svg width="25" height="12" viewBox="0 0 25 12" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <rect x="0.5" y="0.5" width="22" height="11" rx="3" stroke="currentColor" stroke-opacity="0.4"/>
+            <rect x="2"   y="2"   width="19" height="8"  rx="1.8" fill="currentColor"/>
+            <path d="M23.5 4 V8 C24.1 7.7 24.5 7.1 24.5 6.4 V5.6 C24.5 4.9 24.1 4.3 23.5 4 Z" fill="currentColor" fill-opacity="0.4"/>
+          </svg>
+        </span>
+      </div>
+
+      <!-- Navigation Bar (Classic: Figma 12:1681 / LG: Figma 12:1607) -->
+      <div class="nav-bar">
+        <!-- Leading: 戻る (LG では単独 Pill) -->
+        <div class="nav-side leading">
+          <div class="pill pill-single">
+            <button class="icon-btn" type="button" aria-label="戻る">
+              <!-- chevron.left（戻る） -->
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M14.5 6 L8.5 12 L14.5 18" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+        <!-- Trailing: AIメモ (単独 Pill) + スピーカー/カメラ/その他 (まとめ Pill) -->
+        <div class="nav-side right">
+          <div class="pill pill-single">
+            <!-- AIメモ (aiMemoIcon.svg) -->
+            <button class="icon-btn" type="button" aria-label="AIメモ">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path fill-rule="evenodd" clip-rule="evenodd" d="M15.6143 12.5352C15.7262 12.2232 16.1671 12.2232 16.2871 12.5352L16.8545 14.0703C17.0944 14.7102 17.5906 15.2143 18.2305 15.4463L19.7666 16.0146C20.0784 16.1267 20.0784 16.5665 19.7666 16.6865L18.2305 17.2549C17.5906 17.4949 17.0865 17.991 16.8545 18.6309L16.2871 20.166C16.1751 20.478 15.7342 20.478 15.6143 20.166L15.0469 18.6309C14.8069 17.9909 14.3108 17.4869 13.6709 17.2549L12.1348 16.6865C11.8231 16.5744 11.8231 16.1347 12.1348 16.0146L13.6709 15.4463C14.3108 15.2063 14.8149 14.7102 15.0469 14.0703L15.6143 12.5352ZM16.7988 3.59961C18.1264 3.59973 18.3984 4.67142 18.3984 5.99902V11.2793H17.1982V5.99902C17.1982 5.33529 17.1981 4.7998 16.3184 4.7998H6.39941C5.73562 4.7998 5.19948 5.33529 5.19922 5.99902V17.1982C5.19922 17.8622 5.73546 18.3984 6.39941 18.3984H11.8389V19.5986H6.39941C5.07151 19.5986 4 18.5261 4 17.1982V5.99902C4.00026 4.67134 5.07167 3.59961 6.39941 3.59961H16.7988ZM13.5986 11.999H7.19922V10.7988H13.5986V11.999ZM15.1982 8.79883H7.19922V7.59961H15.1982V8.79883Z" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+          <div class="pill pill-group">
+            <!-- スピーカー (toggle: SperkerOnIcon.svg / SperkerOffIcon.svg) -->
+            <button class="icon-btn toggle-btn" type="button" data-toggle="speaker" data-state="on" aria-label="スピーカー" aria-pressed="false">
+              <!-- SperkerOnIcon.svg -->
+              <svg class="icon-on" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M4.42139 15.2124C3.44189 15.2124 2.96045 14.731 2.96045 13.6934V10.3647C2.96045 9.33545 3.44189 8.8374 4.42139 8.8374H6.87842C6.97803 8.8374 7.06104 8.8208 7.12744 8.75439L10.979 5.30127C11.3193 5.00244 11.5435 4.82812 11.8838 4.82812C12.3569 4.82812 12.6807 5.20996 12.6807 5.6748V18.3667C12.6807 18.8315 12.3569 19.1719 11.8921 19.1719C11.5601 19.1719 11.2944 19.0225 10.979 18.7402L7.12744 15.3037C7.06104 15.2373 6.97803 15.2124 6.87842 15.2124H4.42139ZM4.46289 14.2744H7.10254C7.33496 14.2744 7.50098 14.3159 7.69189 14.4902L11.4023 17.8188C11.4688 17.877 11.5186 17.9019 11.5684 17.9019C11.6348 17.9019 11.6846 17.8521 11.6846 17.7607V6.23926C11.6846 6.14795 11.6348 6.10645 11.5601 6.10645C11.4937 6.10645 11.4521 6.14795 11.394 6.18945L7.69189 9.56787C7.50098 9.75049 7.33496 9.78369 7.10254 9.78369H4.46289C4.10596 9.78369 3.96484 9.93311 3.96484 10.2983V13.7681C3.96484 14.125 4.10596 14.2744 4.46289 14.2744ZM18.624 17.6611C18.3833 17.5034 18.3501 17.2046 18.5327 16.939C19.4873 15.6025 20.0435 13.8511 20.0435 12C20.0435 10.1489 19.4956 8.38916 18.5327 7.06104C18.3418 6.79541 18.3833 6.49658 18.624 6.33057C18.8564 6.17285 19.147 6.22266 19.3213 6.47168C20.3921 7.88281 21.0396 9.9248 21.0396 12C21.0396 14.0669 20.3838 16.1006 19.3213 17.5283C19.147 17.769 18.8564 17.8271 18.624 17.6611ZM15.7104 15.4863C15.4531 15.3037 15.4199 14.9966 15.6108 14.7227C16.1587 13.9673 16.4492 13.0542 16.4492 12C16.4492 10.9458 16.167 10.0244 15.6108 9.26904C15.4116 9.00342 15.4531 8.69629 15.7104 8.51367C15.9263 8.35596 16.2251 8.40576 16.3994 8.65479C17.0386 9.48486 17.4453 10.6885 17.4453 12C17.4453 13.3115 17.0386 14.5151 16.3994 15.3452C16.2251 15.5942 15.9263 15.6357 15.7104 15.4863Z" fill="currentColor"/>
+              </svg>
+              <!-- SperkerOffIcon.svg -->
+              <svg class="icon-off" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M15.944 13.9216L14.9479 12.9255V5.72876C14.9479 5.63745 14.8981 5.59595 14.8234 5.59595C14.757 5.59595 14.7155 5.63745 14.6573 5.67896L11.0216 8.99927L10.3326 8.302L14.2423 4.79077C14.5826 4.49194 14.8068 4.31763 15.1471 4.31763C15.6202 4.31763 15.944 4.69946 15.944 5.16431V13.9216ZM18.5587 19.533L4.73792 5.72876C4.547 5.53784 4.547 5.21411 4.73792 5.03149C4.93713 4.83228 5.26086 4.84058 5.44348 5.03149L19.256 18.8357C19.4552 19.0266 19.4552 19.3337 19.256 19.533C19.0651 19.7322 18.7496 19.7322 18.5587 19.533ZM7.68469 14.7019C6.7052 14.7019 6.22375 14.2205 6.22375 13.1829V9.85425C6.22375 9.49731 6.29846 9.21509 6.43127 9.00757L7.22815 9.80444V13.2576C7.22815 13.6145 7.36926 13.7639 7.7262 13.7639H10.3824C10.6149 13.7639 10.7477 13.7971 10.922 13.9548L14.9396 17.5491L15.7697 18.3542C15.6202 18.5535 15.4127 18.6614 15.1554 18.6614C14.8234 18.6614 14.5577 18.5037 14.2423 18.2297L10.3907 14.7932C10.3243 14.7268 10.2413 14.7019 10.1417 14.7019H7.68469Z" fill="currentColor"/>
+              </svg>
+            </button>
+            <!-- カメラ切替 -->
+            <button class="icon-btn" type="button" aria-label="カメラ切替">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M4.42554 19.7778C2.80688 19.7778 1.97681 18.9478 1.97681 17.354V8.63818C1.97681 7.03613 2.80688 6.20605 4.42554 6.20605H6.73315C7.39722 6.20605 7.59644 6.10645 7.98657 5.6665L8.68384 4.89453C9.10718 4.42969 9.48901 4.22217 10.3191 4.22217H13.5564C14.3865 4.22217 14.7683 4.42969 15.2 4.89453L15.8889 5.6665C16.2874 6.11475 16.4783 6.20605 17.1423 6.20605H19.5745C21.1931 6.20605 22.0232 7.03613 22.0232 8.63818V17.354C22.0232 18.9478 21.1931 19.7778 19.5745 19.7778H4.42554ZM4.44214 18.7485H19.5579C20.4709 18.7485 20.9939 18.2588 20.9939 17.2959V8.68799C20.9939 7.7334 20.4709 7.23535 19.5579 7.23535H16.9265C16.1711 7.23535 15.7976 7.12744 15.366 6.646L14.6853 5.88232C14.2122 5.35938 13.9714 5.25146 13.2825 5.25146H10.593C9.90405 5.25146 9.66333 5.35938 9.19019 5.88232L8.50952 6.646C8.08618 7.12744 7.70435 7.23535 6.95728 7.23535H4.44214C3.52905 7.23535 3.0061 7.7334 3.0061 8.68799V17.2959C3.0061 18.2588 3.52905 18.7485 4.44214 18.7485ZM12.0042 8.13184C14.2205 8.13184 16.0632 9.76709 16.3787 11.9004H17.3C17.6072 11.9004 17.6653 12.166 17.4993 12.415L16.2957 14.1665C16.0881 14.4736 15.7561 14.457 15.5569 14.1665L14.3367 12.415C14.1707 12.1826 14.2454 11.9004 14.5525 11.9004H15.3909C15.0837 10.3066 13.6892 9.10303 12.0042 9.10303C11.1409 9.10303 10.3523 9.42676 9.75464 9.94971C9.21509 10.373 8.60913 9.63428 9.14038 9.20264C9.90405 8.53857 10.9084 8.13184 12.0042 8.13184ZM6.70825 13.2119C6.40112 13.2119 6.34302 12.9463 6.50903 12.6973L7.71265 10.9458C7.92017 10.6387 8.2439 10.6553 8.45142 10.9458L9.66333 12.6973C9.83765 12.9297 9.75464 13.2119 9.45581 13.2119H8.60913C8.91626 14.8057 10.3191 16.0093 12.0042 16.0093C12.8674 16.0093 13.656 15.6855 14.2454 15.1626C14.7932 14.7393 15.3992 15.478 14.8596 15.9097C14.0959 16.5737 13.0916 16.9805 12.0042 16.9805C9.77954 16.9805 7.94507 15.3452 7.62964 13.2119H6.70825Z" fill="currentColor"/>
+              </svg>
+            </button>
+            <!-- その他（アクションシートを開く） -->
+            <button class="icon-btn" type="button" id="moreBtn" aria-label="その他" aria-haspopup="menu" aria-expanded="false" aria-controls="moreMenu">
+              <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <path d="M6.08569 13.4609C5.28052 13.4609 4.62476 12.8052 4.62476 12C4.62476 11.1865 5.28052 10.5391 6.08569 10.5391C6.89917 10.5391 7.55493 11.1865 7.55493 12C7.55493 12.8052 6.89917 13.4609 6.08569 13.4609ZM12.0042 13.4609C11.1907 13.4609 10.5349 12.8052 10.5349 12C10.5349 11.1865 11.1907 10.5391 12.0042 10.5391C12.8093 10.5391 13.4651 11.1865 13.4651 12C13.4651 12.8052 12.8093 13.4609 12.0042 13.4609ZM17.9143 13.4609C17.1008 13.4609 16.4534 12.8052 16.4534 12C16.4534 11.1865 17.1008 10.5391 17.9143 10.5391C18.7195 10.5391 19.3752 11.1865 19.3752 12C19.3752 12.8052 18.7195 13.4609 17.9143 13.4609Z" fill="currentColor"/>
+              </svg>
+            </button>
+          </div>
+        </div>
+      </div>
+      </div><!-- /.nav-header -->
+
+      <!-- Action Sheet: NavBar その他から開くメニュー (Figma 20:783 / 20:793) -->
+      <div class="action-sheet" id="moreMenu" role="menu" aria-hidden="true" aria-labelledby="moreBtn">
+        <button class="as-item" type="button" role="menuitem" data-action="copy-link">
+          <span class="as-icon" aria-hidden="true">
+            <!-- LinkIcon.svg -->
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M11.6316 8.6662C12.2459 8.716 12.755 8.83498 13.159 9.02313C13.5685 9.21128 13.9282 9.46307 14.2381 9.7785C14.8911 10.4204 15.3227 11.1288 15.533 11.9035C15.7433 12.6782 15.7405 13.453 15.5247 14.2277C15.3089 14.9969 14.8828 15.6997 14.2464 16.3361L11.4075 19.175C10.7766 19.8058 10.0766 20.2292 9.3074 20.445C8.53819 20.6608 7.76345 20.6636 6.98318 20.4533C6.20844 20.243 5.49734 19.8114 4.84988 19.1584C4.20242 18.5165 3.77355 17.8081 3.56326 17.0334C3.35297 16.2586 3.35574 15.4867 3.57156 14.7175C3.78738 13.9427 4.21072 13.2372 4.84158 12.6008L7.46463 9.98602C7.41482 10.2129 7.40099 10.4426 7.42312 10.675C7.44526 10.9074 7.49783 11.1177 7.58084 11.3058L5.63015 13.2565C5.13211 13.7601 4.79731 14.3163 4.62576 14.925C4.45974 15.5282 4.45698 16.1341 4.61746 16.7429C4.78347 17.3516 5.11551 17.9077 5.61355 18.4113C6.1116 18.9038 6.66222 19.2303 7.26541 19.3908C7.87413 19.5568 8.48286 19.5541 9.09158 19.3825C9.7003 19.2165 10.2537 18.8817 10.7517 18.3781L13.4661 15.6804C13.9641 15.1768 14.2962 14.6234 14.4622 14.0202C14.6337 13.4115 14.6365 12.8028 14.4705 12.194C14.3045 11.5853 13.9724 11.0319 13.4744 10.5339C13.1534 10.2129 12.7771 9.96942 12.3455 9.80341C11.9138 9.63186 11.3854 9.54331 10.76 9.53778L11.6316 8.6662ZM12.3704 15.34C11.7561 15.2902 11.2442 15.1712 10.8347 14.9831C10.4252 14.7949 10.0683 14.5432 9.76394 14.2277C9.11095 13.5858 8.67931 12.8775 8.46902 12.1027C8.25873 11.328 8.2615 10.556 8.47732 9.7868C8.69314 9.01206 9.11925 8.3065 9.75564 7.6701L12.5862 4.83124C13.2226 4.19484 13.9254 3.76874 14.6946 3.55292C15.4638 3.3371 16.2358 3.3371 17.0105 3.55292C17.7908 3.7632 18.5047 4.19208 19.1521 4.83954C19.7941 5.487 20.2202 6.1981 20.4304 6.97284C20.6463 7.74758 20.6463 8.51955 20.4304 9.28876C20.2146 10.058 19.7913 10.7608 19.1604 11.3972L16.5374 14.0119C16.5872 13.7905 16.601 13.5637 16.5789 13.3312C16.5567 13.0988 16.5042 12.8858 16.4212 12.6921L18.3719 10.7497C18.8699 10.2461 19.2019 9.68996 19.3679 9.08124C19.5395 8.47251 19.5423 7.86656 19.3762 7.26337C19.2158 6.65464 18.8865 6.10126 18.3885 5.60321C17.8849 5.09963 17.3315 4.7676 16.7283 4.60712C16.1251 4.44663 15.5192 4.45217 14.9104 4.62372C14.3017 4.78973 13.7456 5.12177 13.242 5.61981L10.5359 8.32587C10.0323 8.82391 9.69754 9.3773 9.53152 9.98602C9.36551 10.5947 9.36274 11.2035 9.52322 11.8122C9.68924 12.4154 10.024 12.9688 10.5276 13.4724C10.843 13.7933 11.2166 14.0396 11.6482 14.2111C12.0799 14.3771 12.6111 14.4629 13.242 14.4684L12.3704 15.34Z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="as-label">リンクをコピー</span>
+        </button>
+        <button class="as-item as-toggle" type="button" role="menuitemcheckbox" aria-checked="false" data-state="off" data-action="stamp-toggle">
+          <span class="as-icon" aria-hidden="true">
+            <!-- stampIcon.svg (笑顔の丸い顔) -->
+            <svg viewBox="0 0 24 25" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M12 20.9336C10.8324 20.9336 9.73665 20.7122 8.71289 20.2695C7.68913 19.8324 6.78988 19.2264 6.01514 18.4517C5.2404 17.6769 4.63167 16.7777 4.18896 15.7539C3.75179 14.7301 3.5332 13.6344 3.5332 12.4668C3.5332 11.2992 3.75179 10.2035 4.18896 9.17969C4.63167 8.15592 5.2404 7.25667 6.01514 6.48193C6.78988 5.70166 7.68913 5.09294 8.71289 4.65576C9.73665 4.21859 10.8324 4 12 4C13.1676 4 14.2633 4.21859 15.2871 4.65576C16.3109 5.09294 17.2101 5.70166 17.9849 6.48193C18.7596 7.25667 19.3656 8.15592 19.8027 9.17969C20.2454 10.2035 20.4668 11.2992 20.4668 12.4668C20.4668 13.6344 20.2454 14.7301 19.8027 15.7539C19.3656 16.7777 18.7596 17.6769 17.9849 18.4517C17.2101 19.2264 16.3109 19.8324 15.2871 20.2695C14.2633 20.7122 13.1676 20.9336 12 20.9336ZM12 19.5225C12.974 19.5225 13.887 19.3398 14.7393 18.9746C15.5915 18.6094 16.3413 18.103 16.9888 17.4556C17.6362 16.8081 18.1426 16.0583 18.5078 15.2061C18.873 14.3538 19.0557 13.4408 19.0557 12.4668C19.0557 11.4928 18.873 10.5798 18.5078 9.72754C18.1426 8.86979 17.6362 8.11995 16.9888 7.47803C16.3413 6.83057 15.5915 6.32422 14.7393 5.95898C13.887 5.59375 12.974 5.41113 12 5.41113C11.026 5.41113 10.113 5.59375 9.26074 5.95898C8.40853 6.32422 7.65869 6.83057 7.01123 7.47803C6.36377 8.11995 5.85742 8.86979 5.49219 9.72754C5.12695 10.5798 4.94434 11.4928 4.94434 12.4668C4.94434 13.4408 5.12695 14.3538 5.49219 15.2061C5.85742 16.0583 6.36377 16.8081 7.01123 17.4556C7.65869 18.103 8.40853 18.6094 9.26074 18.9746C10.113 19.3398 11.026 19.5225 12 19.5225ZM11.9917 16.6255C11.4162 16.6255 10.9098 16.5231 10.4727 16.3184C10.0355 16.1081 9.69515 15.8701 9.45166 15.6045C9.2137 15.3333 9.09473 15.1064 9.09473 14.9238C9.09473 14.8242 9.13346 14.755 9.21094 14.7163C9.28841 14.6776 9.37142 14.6776 9.45996 14.7163C9.76432 14.8823 10.1102 15.0428 10.4976 15.1978C10.8905 15.3472 11.3885 15.4219 11.9917 15.4219C12.5949 15.4219 13.0902 15.3472 13.4775 15.1978C13.8704 15.0428 14.2163 14.8823 14.5151 14.7163C14.6037 14.6776 14.6867 14.6776 14.7642 14.7163C14.8472 14.755 14.8887 14.8242 14.8887 14.9238C14.8887 15.1064 14.7669 15.3333 14.5234 15.6045C14.2855 15.8701 13.9479 16.1081 13.5107 16.3184C13.0736 16.5231 12.5672 16.6255 11.9917 16.6255ZM9.52637 11.728C9.26628 11.728 9.03939 11.6229 8.8457 11.4126C8.65202 11.1968 8.55518 10.9229 8.55518 10.5908C8.55518 10.2588 8.65202 9.98486 8.8457 9.76904C9.03939 9.55322 9.26628 9.44531 9.52637 9.44531C9.79199 9.44531 10.0244 9.55322 10.2236 9.76904C10.4229 9.98486 10.5225 10.2588 10.5225 10.5908C10.5225 10.9229 10.4229 11.1968 10.2236 11.4126C10.0244 11.6229 9.79199 11.728 9.52637 11.728ZM14.4487 11.728C14.1886 11.728 13.9618 11.6229 13.7681 11.4126C13.5744 11.1968 13.4775 10.9229 13.4775 10.5908C13.4775 10.2588 13.5744 9.98486 13.7681 9.76904C13.9618 9.55322 14.1886 9.44531 14.4487 9.44531C14.7144 9.44531 14.9468 9.55322 15.146 9.76904C15.3452 9.98486 15.4448 10.2588 15.4448 10.5908C15.4448 10.9229 15.3452 11.1968 15.146 11.4126C14.9468 11.6229 14.7144 11.728 14.4487 11.728Z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="as-label">スタンプ表示</span>
+        </button>
+        <button class="as-item" type="button" role="menuitem" data-action="bg-setting">
+          <span class="as-icon" aria-hidden="true">
+            <!-- BackgroundIcon.svg -->
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M4.72021 19.5122C3.91227 19.5122 3.30355 19.3075 2.89404 18.8979C2.48454 18.494 2.27979 17.8936 2.27979 17.0967V6.91162C2.27979 6.10921 2.48454 5.50602 2.89404 5.10205C3.30355 4.69255 3.91227 4.48779 4.72021 4.48779H19.2715C20.085 4.48779 20.6965 4.69531 21.106 5.11035C21.5155 5.51986 21.7202 6.12028 21.7202 6.91162V17.0967C21.7202 17.8936 21.5155 18.494 21.106 18.8979C20.6965 19.3075 20.085 19.5122 19.2715 19.5122H4.72021ZM4.74512 18.4912H19.2549C19.7142 18.4912 20.0684 18.3695 20.3174 18.126C20.5664 17.8825 20.6909 17.52 20.6909 17.0386V6.96973C20.6909 6.48828 20.5664 6.12581 20.3174 5.88232C20.0684 5.6333 19.7142 5.50879 19.2549 5.50879H4.74512C4.27474 5.50879 3.91504 5.6333 3.66602 5.88232C3.42253 6.12581 3.30078 6.48828 3.30078 6.96973V17.0386C3.30078 17.52 3.42253 17.8825 3.66602 18.126C3.91504 18.3695 4.27474 18.4912 4.74512 18.4912ZM6.26416 18.8315C6.36377 18.256 6.57959 17.7165 6.91162 17.2129C7.24365 16.7093 7.66699 16.2694 8.18164 15.8931C8.70182 15.5168 9.28564 15.2207 9.93311 15.0049C10.5861 14.7891 11.2751 14.6812 12 14.6812C12.736 14.6812 13.4277 14.7891 14.0752 15.0049C14.7282 15.2207 15.312 15.5168 15.8267 15.8931C16.3413 16.2694 16.7646 17.2129 16.7646 17.2129C17.0967 17.7165 17.4287 18.256 17.7441 18.8315H6.26416ZM12 13.3115C11.4798 13.306 11.0067 13.1704 10.5806 12.9048C10.16 12.6336 9.8252 12.2684 9.57617 11.8091C9.32715 11.3442 9.19987 10.8185 9.19434 10.2319C9.19434 9.68408 9.31885 9.18327 9.56787 8.72949C9.81689 8.27018 10.1545 7.90495 10.5806 7.63379C11.0067 7.3571 11.4798 7.21875 12 7.21875C12.5257 7.21875 13.0016 7.3571 13.4277 7.63379C13.8538 7.90495 14.1914 8.27018 14.4404 8.72949C14.6895 9.18327 14.814 9.68408 14.814 10.2319C14.814 10.8185 14.6895 11.347 14.4404 11.8174C14.1914 12.2822 13.8538 12.6502 13.4277 12.9214C13.0016 13.187 12.5257 13.3171 12 13.3115Z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="as-label">背景設定</span>
+        </button>
+        <button class="as-item" type="button" role="menuitem" data-action="audio-only">
+          <span class="as-icon" aria-hidden="true">
+            <!-- phoneChangeIcon.svg -->
+            <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M15.7124 19.6971C14.9321 19.6971 14.1104 19.5339 13.2471 19.2074C12.3893 18.8809 11.5177 18.4161 10.6323 17.8129C9.75244 17.2097 8.89193 16.4875 8.05078 15.6464C7.2041 14.7997 6.47917 13.9336 5.87598 13.0482C5.27279 12.1628 4.80794 11.2884 4.48145 10.4252C4.16048 9.56188 4 8.74011 4 7.95983C4 7.52819 4.04427 7.12976 4.13281 6.76452C4.22135 6.39929 4.35693 6.06172 4.53955 5.75183C4.7277 5.44193 4.96842 5.1514 5.26172 4.88024C5.28939 4.85257 5.31706 4.82767 5.34473 4.80554C5.3724 4.77787 5.3973 4.75297 5.41943 4.73083C5.95622 4.23278 6.4764 3.98929 6.97998 4.00036C7.24007 4.00036 7.49463 4.07507 7.74365 4.22448C7.99821 4.3739 8.2334 4.60908 8.44922 4.93005L10.0762 7.28747C10.2588 7.5531 10.3418 7.83255 10.3252 8.12585C10.3086 8.41914 10.2201 8.69307 10.0596 8.94763L9.2959 10.1512C9.16309 10.3615 9.15202 10.569 9.2627 10.7738C9.38997 10.9952 9.59196 11.2829 9.86865 11.6371C10.1509 11.9857 10.4774 12.3482 10.8481 12.7245C11.0972 12.968 11.3462 13.2004 11.5952 13.4217C11.8442 13.6376 12.0739 13.8285 12.2842 13.9945C12.5 14.155 12.6688 14.274 12.7905 14.3514C12.9289 14.4344 13.0589 14.4787 13.1807 14.4842C13.3079 14.4842 13.4408 14.451 13.5791 14.3846L14.8823 13.7538C15.2476 13.5767 15.5741 13.4992 15.8618 13.5214C16.1496 13.538 16.4401 13.6459 16.7334 13.8451L18.7671 15.2396C19.0881 15.4554 19.3232 15.6906 19.4727 15.9452C19.6221 16.1942 19.6968 16.4515 19.6968 16.7172C19.6968 16.9662 19.6359 17.2207 19.5142 17.4808C19.3979 17.7409 19.2153 18.0038 18.9663 18.2694C18.9386 18.2971 18.9137 18.322 18.8916 18.3441C18.8695 18.3718 18.8473 18.3994 18.8252 18.4271C18.4046 18.8754 17.9453 19.1991 17.4473 19.3983C16.9492 19.5975 16.3709 19.6971 15.7124 19.6971ZM15.7124 18.7259C16.1828 18.7149 16.62 18.6291 17.0239 18.4686C17.4279 18.3081 17.7876 18.0591 18.103 17.7216C18.1196 17.6994 18.1335 17.68 18.1445 17.6634C18.1611 17.6468 18.1805 17.6275 18.2026 17.6053C18.4849 17.301 18.626 17.0049 18.626 16.7172C18.626 16.5788 18.5955 16.4543 18.5347 16.3436C18.4738 16.2329 18.377 16.1333 18.2441 16.0448L16.3018 14.7333C16.1468 14.6337 15.9946 14.5756 15.8452 14.559C15.6958 14.5424 15.5298 14.5756 15.3472 14.6586L13.9277 15.3392C13.6178 15.4886 13.3439 15.5523 13.106 15.5301C12.868 15.508 12.6383 15.4195 12.417 15.2645C12.2344 15.1428 12.0158 14.9851 11.7612 14.7914C11.5122 14.5922 11.2493 14.3708 10.9727 14.1273C10.696 13.8838 10.4331 13.6376 10.1841 13.3885C9.80778 13.0067 9.45638 12.6138 9.12988 12.2098C8.80892 11.8003 8.54883 11.4517 8.34961 11.1639C8.2002 10.9426 8.11719 10.724 8.10059 10.5082C8.08398 10.2924 8.15316 10.0627 8.30811 9.81921L9.14648 8.49108C9.31803 8.20332 9.3291 7.94877 9.17969 7.72741L7.65234 5.453C7.48079 5.19844 7.25944 5.07116 6.98828 5.07116C6.84993 5.07116 6.70329 5.10713 6.54834 5.17907C6.39893 5.24548 6.24674 5.35062 6.0918 5.4945C6.0752 5.5111 6.05583 5.5277 6.03369 5.54431C6.01709 5.56091 5.99772 5.57751 5.97559 5.59411C5.63802 5.90954 5.38623 6.26647 5.22021 6.66491C5.05973 7.06335 4.97673 7.49222 4.97119 7.95153C4.96012 8.65987 5.12061 9.418 5.45264 10.2259C5.78467 11.0339 6.23844 11.8474 6.81396 12.6664C7.39502 13.4799 8.05078 14.2518 8.78125 14.9823C9.50618 15.7072 10.2699 16.3519 11.0723 16.9164C11.8747 17.4808 12.6715 17.9235 13.4629 18.2445C14.2598 18.571 15.0096 18.7315 15.7124 18.7259Z" fill="currentColor"/>
+            </svg>
+          </span>
+          <span class="as-label">音声通話に切り替える</span>
+        </button>
+      </div>
+
+      <!-- Content Area: 既定はピンク (映像差し替え予定)、ユーザー選択時はフル表示、Camera Off 時は自分のアバター -->
+      <div class="content">
+        <!-- Video Full: 選択中ユーザーのフル表示 -->
+        <div class="video-full" id="videoFull">
+          <span class="video-full-name" id="videoFullName"></span>
+        </div>
+        <!-- Camera Off 時の自分アバター -->
+        <div class="self-avatar">
+          <img src="Docment/Asset/image/Demo%20User=石井太郎.png" alt="自分">
+        </div>
+      </div>
+
+      <!-- Toolbar: Mic / Video / Share / End (Figma 1:480) -->
+      <div class="toolbar">
+        <!-- Mic (toggle: MicOn.svg / MicOff.svg) -->
+        <button class="toolbar-btn toggle-btn" type="button" data-toggle="mic" data-state="on" aria-label="マイク" aria-pressed="false">
+          <!-- MicOn.svg -->
+          <svg class="icon-on" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M35.4121 25.2256C35.5772 25.2256 35.715 25.2814 35.8252 25.3936C35.9416 25.5001 36 25.6341 36 25.7939V27.9951C36 29.0961 35.8105 30.106 35.4307 31.0234C35.0508 31.9409 34.5083 32.7373 33.8037 33.4121C33.0992 34.081 32.2566 34.5988 31.2764 34.9658C30.4604 35.2664 29.5658 35.4398 28.5928 35.4902V38.8545H33.2979C33.4571 38.8545 33.5955 38.9081 33.7119 39.0146C33.8282 39.1271 33.8867 39.2631 33.8867 39.4229C33.8867 39.5294 33.8588 39.6242 33.8037 39.707C33.7547 39.7958 33.6837 39.8666 33.5918 39.9199C33.5061 39.9731 33.408 40 33.2979 40H22.7021C22.592 40 22.4939 39.9731 22.4082 39.9199C22.3224 39.8666 22.2514 39.7958 22.1963 39.707C22.1412 39.6242 22.1133 39.5294 22.1133 39.4229C22.1133 39.2631 22.1718 39.1271 22.2881 39.0146C22.4045 38.9081 22.5429 38.8545 22.7021 38.8545H27.416V35.4902C26.4414 35.4409 25.5438 35.2679 24.7236 34.9658C23.7434 34.5988 22.9008 34.081 22.1963 33.4121C21.4917 32.7373 20.9492 31.9409 20.5693 31.0234C20.1895 30.106 20 29.0961 20 27.9951V25.7939C20 25.6341 20.0584 25.5001 20.1748 25.3936C20.2912 25.2813 20.4324 25.2256 20.5977 25.2256C20.7567 25.2257 20.8945 25.2814 21.0107 25.3936C21.1272 25.5001 21.1855 25.6341 21.1855 25.7939V27.96C21.1855 29.2325 21.464 30.3573 22.0215 31.334C22.5851 32.3047 23.3756 33.0657 24.3926 33.6162C25.4157 34.1608 26.6167 34.4326 27.9951 34.4326C29.3796 34.4326 30.5807 34.1607 31.5977 33.6162C32.6208 33.0657 33.4112 32.3047 33.9688 31.334C34.5324 30.3573 34.8145 29.2326 34.8145 27.96V25.7939C34.8145 25.6341 34.8728 25.5001 34.9893 25.3936C35.1056 25.2813 35.2468 25.2256 35.4121 25.2256ZM27.9951 16C28.7608 16 29.4257 16.1715 29.9893 16.5146C30.5529 16.858 30.9912 17.3289 31.3037 17.9268C31.6162 18.5246 31.7724 19.2052 31.7725 19.9688V27.6318C31.7724 28.3953 31.6161 29.0761 31.3037 29.6738C30.9913 30.2716 30.5529 30.7455 29.9893 31.0947C29.4257 31.4379 28.7607 31.6094 27.9951 31.6094C27.2357 31.6093 26.5742 31.4378 26.0107 31.0947C25.4471 30.7455 25.0087 30.2716 24.6963 29.6738C24.3839 29.0761 24.2276 28.3953 24.2275 27.6318V19.9688C24.2276 19.2052 24.3838 18.5246 24.6963 17.9268C25.0088 17.3289 25.4471 16.858 26.0107 16.5146C26.5742 16.1715 27.2357 16 27.9951 16Z" fill="currentColor"/>
+          </svg>
+          <!-- MicOff.svg -->
+          <svg class="icon-off" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M20.1697 27.9956V25.7936C20.1697 25.6337 20.225 25.5006 20.3356 25.394C20.4461 25.2815 20.58 25.2253 20.7371 25.2253C20.8884 25.2253 21.0194 25.2815 21.1299 25.394C21.2405 25.5006 21.2958 25.6337 21.2958 25.7936V27.96C21.2958 29.2327 21.5606 30.3574 22.0901 31.3341C22.6255 32.3048 23.3762 33.0655 24.3423 33.616C25.3141 34.1606 26.4547 34.4329 27.7641 34.4329C28.4566 34.4329 29.1026 34.35 29.702 34.1842C30.3014 34.0185 30.8455 33.7847 31.3343 33.4828L32.1374 34.3085C31.6079 34.6519 31.023 34.9271 30.3829 35.1343C29.7485 35.3356 29.0648 35.4569 28.3315 35.4983V38.8546H32.8008C32.9522 38.8546 33.0831 38.9079 33.1937 39.0144C33.3042 39.1269 33.3595 39.263 33.3595 39.4229C33.3595 39.5294 33.3333 39.6241 33.281 39.707C33.2344 39.7958 33.1675 39.8668 33.0802 39.9201C32.9987 39.9734 32.9056 40 32.8008 40H22.7361C22.6313 40 22.5382 39.9734 22.4568 39.9201C22.3753 39.8668 22.3084 39.7958 22.256 39.707C22.2036 39.6241 22.1774 39.5294 22.1774 39.4229C22.1774 39.263 22.2327 39.1269 22.3433 39.0144C22.4538 38.9079 22.5848 38.8546 22.7361 38.8546H27.2142V35.4983C26.1492 35.4391 25.1861 35.2142 24.3248 34.8235C23.4635 34.4329 22.7215 33.906 22.0989 33.2431C21.482 32.5801 21.0048 31.8047 20.6673 30.9168C20.3356 30.0229 20.1697 29.0492 20.1697 27.9956ZM33.6476 30.8368C34.0433 29.9726 34.2412 29.0137 34.2412 27.96V25.7936C34.2412 25.6337 34.2964 25.5006 34.407 25.394C34.5176 25.2815 34.6514 25.2253 34.8086 25.2253C34.9657 25.2253 35.0966 25.2815 35.2014 25.394C35.3119 25.5006 35.3672 25.6337 35.3672 25.7936V27.9956C35.3672 28.6881 35.2916 29.3481 35.1403 29.9756C34.9948 30.5971 34.7824 31.1772 34.503 31.7159L33.6476 30.8368ZM27.7641 31.6093C27.0425 31.6093 26.414 31.4377 25.8786 31.0943C25.3432 30.7451 24.9271 30.2716 24.6303 29.6737C24.3335 29.0758 24.1851 28.3951 24.1851 27.6315V26.2198L29.1695 31.2986C28.9658 31.3933 28.7447 31.4702 28.5061 31.5294C28.2733 31.5827 28.026 31.6093 27.7641 31.6093ZM27.7641 16C27.0483 16 26.4227 16.1687 25.8873 16.5061C25.3578 16.8435 24.9417 17.3082 24.6391 17.9001C24.3423 18.4861 24.191 19.158 24.1851 19.9156V21.212L31.2645 28.4129C31.2878 28.2886 31.3082 28.1613 31.3256 28.0311C31.3431 27.9009 31.3518 27.7677 31.3518 27.6315V19.9689C31.3518 19.2053 31.2034 18.5246 30.9066 17.9267C30.6098 17.3289 30.1937 16.8583 29.6583 16.515C29.1229 16.1717 28.4915 16 27.7641 16ZM36.0219 36.5727L19.1659 19.4451C19.0553 19.3326 19 19.1964 19 19.0366C19 18.8709 19.0553 18.7318 19.1659 18.6193C19.2822 18.5009 19.419 18.4447 19.5761 18.4506C19.7333 18.4506 19.8671 18.5068 19.9777 18.6193L36.8337 35.7469C36.9501 35.8594 37.0054 35.9956 36.9996 36.1554C36.9996 36.3152 36.9443 36.4543 36.8337 36.5727C36.7232 36.6852 36.5864 36.7414 36.4235 36.7414C36.2663 36.7414 36.1325 36.6852 36.0219 36.5727Z" fill="currentColor"/>
+          </svg>
+        </button>
+        <!-- Video (toggle: VideoOn.svg / VideoOff.svg) -->
+        <button class="toolbar-btn toggle-btn" type="button" data-toggle="video" data-state="on" aria-label="カメラ" aria-pressed="false">
+          <!-- VideoOn.svg -->
+          <svg class="icon-on" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path fill-rule="evenodd" clip-rule="evenodd" d="M30.0879 19.3506C31.1076 19.3506 31.8882 19.6494 32.4287 20.2471C32.9691 20.8392 33.2393 21.686 33.2393 22.7871V33.2051C33.2392 34.3061 32.961 35.1554 32.4053 35.7529C31.8495 36.3506 31.0617 36.6494 30.042 36.6494H19.1973C18.1776 36.6494 17.3897 36.3505 16.834 35.7529C16.2783 35.1554 16.0001 34.3061 16 33.2051V22.7871C16 21.686 16.2828 20.8392 16.8486 20.2471C17.4146 19.6494 18.1979 19.3506 19.1973 19.3506H30.0879ZM38.8984 21.1436C39.2247 21.1436 39.4904 21.2621 39.6943 21.5C39.8982 21.7323 39.9999 22.0536 40 22.4629V33.5283C40 33.9378 39.8983 34.262 39.6943 34.5C39.4904 34.7379 39.2247 34.8564 38.8984 34.8564C38.715 34.8564 38.5365 34.8098 38.3633 34.7158C38.1899 34.6273 38.0161 34.5055 37.8428 34.3506L34.2793 31.1465V24.8291L37.8428 21.6494C38.0161 21.4889 38.1899 21.3649 38.3633 21.2764C38.5366 21.1879 38.715 21.1436 38.8984 21.1436Z" fill="currentColor"/>
+          </svg>
+          <!-- VideoOff.svg -->
+          <svg class="icon-off" viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M19.5697 36.6922C18.5192 36.6922 17.7077 36.3884 17.1352 35.7808C16.5679 35.1787 16.2842 34.323 16.2842 33.2137V22.7532C16.2842 22.4132 16.3131 22.0955 16.3709 21.8C16.4339 21.5046 16.5232 21.2537 16.6388 21.0475L31.38 36.6922H19.5697ZM30.7891 19.2664C31.8396 19.2664 32.6432 19.5674 33.2 20.1695C33.7568 20.7659 34.0352 21.6188 34.0352 22.7282V32.7538C34.0352 33.0939 34.0063 33.4144 33.9485 33.7154C33.896 34.0109 33.8198 34.2729 33.72 34.5014L19.357 19.2664H30.7891ZM35.1067 31.1484V24.7851L38.7782 21.5826C38.9568 21.4209 39.1354 21.2955 39.3139 21.2063C39.4925 21.1171 39.6764 21.0725 39.8655 21.0725C40.2016 21.0725 40.4747 21.1924 40.6848 21.4321C40.8949 21.6662 41 21.9895 41 22.402V33.5482C41 33.9607 40.8949 34.2868 40.6848 34.5265C40.4747 34.7662 40.2016 34.886 39.8655 34.886C39.6764 34.886 39.4925 34.8387 39.3139 34.7439C39.1354 34.6547 38.9568 34.5321 38.7782 34.376L35.1067 31.1484ZM34.8624 38.8411L15.1576 17.9369C15.0525 17.831 15 17.7028 15 17.5523C15 17.3962 15.0525 17.2652 15.1576 17.1593C15.2574 17.0478 15.3808 16.9948 15.5279 17.0004C15.6749 17.0004 15.7958 17.0534 15.8903 17.1593L35.5952 38.0635C35.6949 38.1694 35.7448 38.2976 35.7448 38.4481C35.7501 38.5986 35.7002 38.7296 35.5952 38.8411C35.4954 38.947 35.3719 39 35.2248 39C35.083 39 34.9622 38.947 34.8624 38.8411Z" fill="currentColor"/>
+          </svg>
+        </button>
+        <!-- Share (ShareIcon.svg) -->
+        <button class="toolbar-btn" type="button" aria-label="共有">
+          <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M29 20.5C29.55 20.5 30 20.95 30 21.5V39C30 39.55 29.55 40 29 40H19C18.45 40 18 39.55 18 39V21.5C18 20.95 18.45 20.5 19 20.5H29ZM37 16C37.55 16 38 16.45 38 17V34.5C38 35.05 37.55 35.5 37 35.5H31.5V20C31.5 19.45 31.05 19 30.5 19H26V17C26 16.45 26.45 16 27 16H37ZM24.5303 26.4697C24.2403 26.1797 23.7597 26.1797 23.4697 26.4697L20.29 29.6504C20.0002 29.9404 20.0001 30.42 20.29 30.71C20.58 30.9999 21.0596 30.9998 21.3496 30.71L23.25 28.8096V33.5C23.25 33.91 23.59 34.25 24 34.25C24.41 34.25 24.75 33.91 24.75 33.5V28.8096L26.6504 30.71C26.9404 30.9998 27.42 30.9999 27.71 30.71C27.9999 30.42 27.9998 29.9404 27.71 29.6504L24.5303 26.4697Z" fill="currentColor"/>
+          </svg>
+        </button>
+        <!-- End call (phoneIcon.svg) -->
+        <button class="toolbar-btn danger" type="button" aria-label="退出">
+          <svg viewBox="0 0 56 56" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+            <path d="M28 23.5298C28.998 23.5298 30.0068 23.5819 31.0264 23.687C32.0513 23.7922 33.0437 23.967 34.0039 24.2104C34.9641 24.4484 35.8466 24.7638 36.6504 25.1567C37.4539 25.5495 38.1281 26.0336 38.6729 26.6089C39.0882 27.046 39.4116 27.5364 39.6436 28.0786C39.8809 28.6208 39.9999 29.2266 40 29.896C40 30.1947 39.968 30.5105 39.9033 30.8423C39.844 31.1743 39.7355 31.4741 39.5791 31.7397C39.4281 31.9996 39.2227 32.1825 38.9639 32.2876C38.7915 32.409 38.5948 32.4701 38.374 32.4702C38.1582 32.4702 37.9012 32.4448 37.6045 32.395L34.6514 31.8804C34.1444 31.7974 33.7478 31.64 33.4619 31.4077C33.1814 31.1753 32.9737 30.8013 32.8389 30.2866L32.3535 28.4351C32.305 28.2582 32.2425 28.1251 32.167 28.0366C32.0914 27.9427 31.9566 27.8627 31.7627 27.7964C31.3419 27.647 30.8157 27.533 30.1846 27.4556C29.5535 27.3726 28.8252 27.3338 28 27.3394C27.18 27.3449 26.4544 27.3869 25.8232 27.4644C25.1921 27.5363 24.6634 27.647 24.2373 27.7964C24.0488 27.8627 23.914 27.9427 23.833 28.0366C23.7575 28.1251 23.6974 28.2582 23.6543 28.4351L23.1689 30.2866C23.0341 30.8012 22.824 31.1753 22.5381 31.4077C22.2576 31.64 21.8609 31.7974 21.3486 31.8804L18.3955 32.395C18.0988 32.4448 17.8418 32.4702 17.626 32.4702C17.4105 32.4701 17.2164 32.4091 17.0439 32.2876C16.7851 32.1825 16.5797 31.9997 16.4287 31.7397C16.2777 31.4741 16.1668 31.1743 16.0967 30.8423C16.032 30.5105 16 30.1947 16 29.896C16.0001 29.2266 16.1191 28.6208 16.3564 28.0786C16.5938 27.5364 16.9172 27.046 17.3271 26.6089C17.8773 26.0335 18.5548 25.5496 19.3584 25.1567C20.1621 24.7639 21.0414 24.4484 21.9961 24.2104C22.9563 23.967 23.9487 23.7922 24.9736 23.687C26.004 23.5819 27.0128 23.5298 28 23.5298Z" fill="currentColor"/>
+          </svg>
+        </button>
+      </div>
+
+      <!-- Stamp Bar: アクションシートの「スタンプ表示」ON で出るリアクションバー
+           よく使う 6 個 + もっと（+）の 7 アイテム構成 -->
+      <div class="stamp-bar" id="stampBar" role="toolbar" aria-label="スタンプ">
+        <button class="stamp-bar-item" type="button" data-stamp="emo_clap" aria-label="拍手"><img src="Docment/Asset/stamp/emo_clap@240.gif" alt=""></button>
+        <button class="stamp-bar-item" type="button" data-stamp="emo_smile" aria-label="笑顔"><img src="Docment/Asset/stamp/emo_smile@240.gif" alt=""></button>
+        <button class="stamp-bar-item" type="button" data-stamp="emo_yes" aria-label="はい"><img src="Docment/Asset/stamp/emo_yes@240.gif" alt=""></button>
+        <button class="stamp-bar-item" type="button" data-stamp="emo_heart" aria-label="ハート"><img src="Docment/Asset/stamp/emo_heart@240.gif" alt=""></button>
+        <button class="stamp-bar-item" type="button" data-stamp="emo_cracker" aria-label="お祝い"><img src="Docment/Asset/stamp/emo_cracker@240.gif" alt=""></button>
+        <button class="stamp-bar-item" type="button" data-stamp="emo_nod" aria-label="うなずき"><img src="Docment/Asset/stamp/emo_nod@240.gif" alt=""></button>
+        <button class="stamp-more-btn" type="button" id="stampMoreBtn" aria-label="もっと">+</button>
+      </div>
+
+      <!-- Stamp Sheet: もっと（+）で開く全 50 個の BottomSheet -->
+      <div class="stamp-sheet-backdrop" id="stampSheetBackdrop" aria-hidden="true"></div>
+      <div class="stamp-sheet" id="stampSheet" role="dialog" aria-label="スタンプ一覧" aria-modal="true" aria-hidden="true">
+        <div class="stamp-sheet-handle" aria-hidden="true"></div>
+        <div class="stamp-sheet-header">スタンプ</div>
+        <div class="stamp-grid" id="stampGrid"></div>
+      </div>
+
+      <!-- Members: 画面下に固定で並ぶユーザーアイコン列 (Figma 1:481 / 18:316) -->
+      <div class="members">
+        <div class="member-row">
+          <div class="member-item" data-user="中村浩一" role="button" tabindex="0">
+            <div class="member-avatar">
+              <img src="Docment/Asset/image/Demo%20User=中村浩一.png" alt="中村 浩一">
+            </div>
+            <div class="member-overlay" aria-hidden="true"></div>
+            <div class="member-name">中村浩一</div>
+          </div>
+          <div class="member-item" data-user="佐藤直樹" role="button" tabindex="0">
+            <div class="member-avatar">
+              <img src="Docment/Asset/image/Demo%20User=佐藤直樹.png" alt="佐藤 直樹">
+            </div>
+            <div class="member-overlay" aria-hidden="true"></div>
+            <div class="member-name">佐藤直樹</div>
+          </div>
+          <div class="member-item" data-user="木村香" role="button" tabindex="0">
+            <div class="member-avatar">
+              <img src="Docment/Asset/image/Demo%20User=木村香.png" alt="木村 香">
+            </div>
+            <div class="member-overlay" aria-hidden="true"></div>
+            <div class="member-name">木村香</div>
+          </div>
+          <div class="member-item" data-user="田中優子" role="button" tabindex="0">
+            <div class="member-avatar">
+              <img src="Docment/Asset/image/Demo%20User=田中優子.png" alt="田中 優子">
+            </div>
+            <div class="member-overlay" aria-hidden="true"></div>
+            <div class="member-name">田中優子</div>
+          </div>
+          <div class="member-item" data-user="石井太郎" role="button" tabindex="0">
+            <div class="member-avatar">
+              <img src="Docment/Asset/image/Demo%20User=石井太郎.png" alt="石井 太郎">
+            </div>
+            <div class="member-overlay" aria-hidden="true"></div>
+            <div class="member-name">石井太郎</div>
+          </div>
+          <div class="member-item" data-user="鈴木裕二" role="button" tabindex="0">
+            <div class="member-avatar">
+              <img src="Docment/Asset/image/Demo%20User=鈴木裕二.png" alt="鈴木 裕二">
+            </div>
+            <div class="member-overlay" aria-hidden="true"></div>
+            <div class="member-name">鈴木裕二</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <p class="frame-caption">iPhone 14 / 390 × 844 px</p>
+
+<script>
+  const screen = document.getElementById('screen');
+  const body = document.body;
+
+  // ----- Mode (Light / Dark) -----
+  const modeTabs = document.querySelectorAll('.tab[data-mode]');
+  modeTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const mode = tab.dataset.mode;
+      modeTabs.forEach(t => {
+        const active = t === tab;
+        t.classList.toggle('is-active', active);
+        t.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      screen.classList.remove('mode-light', 'mode-dark');
+      screen.classList.add(mode === 'dark' ? 'mode-dark' : 'mode-light');
+      body.classList.toggle('is-dark', mode === 'dark');
+    });
+  });
+
+  // ----- Action Sheet (NavBar その他から開く) -----
+  const moreBtn = document.getElementById('moreBtn');
+  const moreMenu = document.getElementById('moreMenu');
+  const setMenuOpen = (open) => {
+    moreMenu.classList.toggle('is-open', open);
+    moreMenu.setAttribute('aria-hidden', open ? 'false' : 'true');
+    moreBtn.setAttribute('aria-expanded', open ? 'true' : 'false');
+  };
+  moreBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setMenuOpen(!moreMenu.classList.contains('is-open'));
+  });
+  // メニュー内クリックは外側判定から除外
+  moreMenu.addEventListener('click', (e) => e.stopPropagation());
+  // 各アイテム選択で閉じる
+  moreMenu.querySelectorAll('.as-item').forEach(item => {
+    item.addEventListener('click', () => setMenuOpen(false));
+  });
+  // 外側タップで閉じる
+  document.addEventListener('click', () => setMenuOpen(false));
+  // Escape で閉じる
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') setMenuOpen(false);
+  });
+
+  // ----- Stamp 機能 -----
+  // 全 50 個のスタンプ名（@240.gif を付けて参照）
+  const ALL_STAMPS = [
+    'emo_smile', 'emo_grin', 'emo_more_smile', 'emo_wry smile', 'emo_blush',
+    'emo_wink', 'emo_kiss', 'emo_love', 'emo_heart', 'emo_tongueout',
+    'emo_tears', 'emo_sad', 'emo_anger', 'emo_sweat', 'emo_whew',
+    'emo_surprise', 'emo_wonder', 'emo_think', 'emo_snooze', 'emo_yawn',
+    'emo_mumu', 'emo_puke', 'emo_devil', 'emo_otaku', 'emo_quick',
+    'emo_emo', 'emo_kawabot', 'emo_ceo', 'emo_clap', 'emo_yes',
+    'emo_nod', 'emo_bow', 'emo_handshake', 'emo_please', 'emo_roger',
+    'emo_shake', 'emo_dance', 'emo_komanechi', 'emo_muscle', 'emo_gogo',
+    'emo_lucky', 'emo_star', 'emo_cracker', 'emo_cake', 'emo_flower',
+    'emo_eat', 'emo_coffee', 'emo_beer', 'emo_lightbulb', 'emo_talk'
+  ];
+  const stampPath = (name) => `Docment/Asset/stamp/${encodeURIComponent(name)}@240.gif`;
+
+  // 全 50 個グリッドを動的生成
+  const stampGrid = document.getElementById('stampGrid');
+  ALL_STAMPS.forEach(name => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'stamp-grid-item';
+    btn.dataset.stamp = name;
+    btn.setAttribute('aria-label', name.replace(/^emo_/, ''));
+    const img = document.createElement('img');
+    img.src = stampPath(name);
+    img.alt = '';
+    btn.appendChild(img);
+    stampGrid.appendChild(btn);
+  });
+
+  // スタンプ送信（中央にポップ → 上にフロート → フェードアウト）
+  const sendStamp = (name) => {
+    const reaction = document.createElement('div');
+    reaction.className = 'stamp-reaction';
+    // 連投時に重ならないよう左右に少しランダムオフセット（中央 calc(50% - 32px) に対する加減算）
+    const offset = (Math.random() - 0.5) * 80;
+    reaction.style.left = `calc(50% - 32px + ${offset}px)`;
+    const img = document.createElement('img');
+    img.src = stampPath(name);
+    img.alt = '';
+    reaction.appendChild(img);
+    screen.appendChild(reaction);
+    // アニメ完了後に DOM から削除（CSS の 1500ms に合わせて少し余裕）
+    setTimeout(() => reaction.remove(), 1600);
+  };
+
+  // ピン留めバーのスタンプタップで送信
+  document.querySelectorAll('.stamp-bar-item').forEach(btn => {
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      sendStamp(btn.dataset.stamp);
+    });
+  });
+
+  // BottomSheet 開閉
+  const stampSheet = document.getElementById('stampSheet');
+  const stampSheetBackdrop = document.getElementById('stampSheetBackdrop');
+  const stampMoreBtn = document.getElementById('stampMoreBtn');
+  const setStampSheetOpen = (open) => {
+    stampSheet.classList.toggle('is-open', open);
+    stampSheetBackdrop.classList.toggle('is-open', open);
+    stampSheet.setAttribute('aria-hidden', open ? 'false' : 'true');
+    stampSheetBackdrop.setAttribute('aria-hidden', open ? 'false' : 'true');
+  };
+  stampMoreBtn.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setStampSheetOpen(true);
+  });
+  stampSheetBackdrop.addEventListener('click', () => setStampSheetOpen(false));
+  // ハンドルをタップ／ドラッグでも閉じる（簡易：タップだけ）
+  stampSheet.querySelector('.stamp-sheet-handle').addEventListener('click', () => setStampSheetOpen(false));
+  // グリッドのスタンプタップで送信し、シートを閉じる
+  stampGrid.addEventListener('click', (e) => {
+    const btn = e.target.closest('.stamp-grid-item');
+    if (!btn) return;
+    sendStamp(btn.dataset.stamp);
+    setStampSheetOpen(false);
+  });
+  // Escape で閉じる
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && stampSheet.classList.contains('is-open')) setStampSheetOpen(false);
+  });
+
+  // アクションシート内「スタンプ表示」のトグル
+  const stampToggle = moreMenu.querySelector('.as-toggle[data-action="stamp-toggle"]');
+  if (stampToggle) {
+    stampToggle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const next = stampToggle.dataset.state === 'on' ? 'off' : 'on';
+      stampToggle.dataset.state = next;
+      stampToggle.setAttribute('aria-checked', next === 'on' ? 'true' : 'false');
+      screen.dataset.stamps = next === 'on' ? 'show' : 'hide';
+      // 既存のメニューアイテムクリックは menu を閉じるが、トグルは閉じる前に状態を反映済み
+    });
+  }
+
+  // ----- Member 選択トグル -----
+  // タップで選択、もう一度タップで解除。同時に選択できるのは1人だけ
+  // 選択時は device-screen に data-selected-user を反映 → Content が Full 表示に切替
+  const videoFullName = document.getElementById('videoFullName');
+  document.querySelectorAll('.member-item').forEach(item => {
+    const select = () => {
+      const wasSelected = item.classList.contains('is-selected');
+      document.querySelectorAll('.member-item.is-selected').forEach(el => {
+        el.classList.remove('is-selected');
+      });
+      if (!wasSelected) {
+        item.classList.add('is-selected');
+        screen.dataset.selectedUser = item.dataset.user;
+        if (videoFullName) videoFullName.textContent = item.dataset.user;
+      } else {
+        delete screen.dataset.selectedUser;
+        if (videoFullName) videoFullName.textContent = '';
+      }
+    };
+    item.addEventListener('click', select);
+    item.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') {
+        e.preventDefault();
+        select();
+      }
+    });
+  });
+
+  // ----- 汎用トグル (Mic / Video / Speaker) -----
+  document.querySelectorAll('.toggle-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const next = btn.dataset.state === 'on' ? 'off' : 'on';
+      btn.dataset.state = next;
+      btn.setAttribute('aria-pressed', next === 'off' ? 'true' : 'false');
+
+      // Camera (video) は画面背景・自分のアバター表示にも反映
+      if (btn.dataset.toggle === 'video') {
+        screen.dataset.camera = next;
+      }
+    });
+  });
+
+  // ----- OS Theme (Classic / Liquid Glass) -----
+  const themeTabs = document.querySelectorAll('.tab[data-theme]');
+  themeTabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      const theme = tab.dataset.theme;
+      themeTabs.forEach(t => {
+        const active = t === tab;
+        t.classList.toggle('is-active', active);
+        t.setAttribute('aria-selected', active ? 'true' : 'false');
+      });
+      screen.classList.remove('theme-classic', 'theme-lg');
+      screen.classList.add(theme === 'lg' ? 'theme-lg' : 'theme-classic');
+    });
+  });
+</script>
+</body>
+</html>
